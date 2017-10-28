@@ -1,0 +1,8 @@
+= Standard Document
+:keywords: asciidoctor, tests
+
+To be standard or not to be...
+
+== The Reason Why
+
+Because it's useful for testing.

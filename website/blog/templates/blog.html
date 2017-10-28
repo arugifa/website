@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block title %}Blog{% endblock %}
+
+{% block content %}
+    <section class="article-list">
+        {% for article in articles %}
+        <article class="article-list__item">
+            <h1><a class="article-list__title" href="{{ url_for('.article', uri=article.uri) }}">
+                {{ article.title }}
+            </a></h1>
+            <p class="article-list__teaser">{{ article.lead }}</p>
+            <p><time class="article-list__publication">{{ article.publication_date }}</time></p>
+        </article>
+        {% endfor %}
+    </section>
+{% endblock content %}

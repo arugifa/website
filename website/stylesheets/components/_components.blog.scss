@@ -1,0 +1,35 @@
+// Articles list displayed on the home page.
+
+.article-list__title {
+    @include inuit-font-size(24px);
+
+    color: black;
+    font-weight: bold;
+    text-decoration: none;
+
+    &:hover,
+    &:focus,
+    &:active {
+        color: red;
+    }
+}
+
+.article-list__publication {
+    @include inuit-font-size(14px);
+
+    color: grey;
+    font-weight: italic;
+}
+
+
+// Article displayed on its own page.
+
+.article__teaser {
+    @include inuit-font-size(18px);
+
+    color: grey;
+}
+
+.article footer {
+    text-align: right;
+}

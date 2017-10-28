@@ -1,0 +1,10 @@
+.footer {
+    @include inuit-font-size(12px);
+
+    text-align: right;
+}
+
+.footer__link {
+    color: black;
+    text-decoration: none;
+}

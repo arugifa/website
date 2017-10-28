@@ -1,0 +1,72 @@
+:ascii: https://asciidoctor.org/
+:django: https://www.djangoproject.com/
+:flask: http://flask.pocoo.org/
+:git: https://git-scm.com/
+:inuit: https://github.com/inuitcss/inuitcss
+:invoke: https://www.pyinvoke.org/
+:markdown: https://daringfireball.net/projects/markdown/
+:markup: https://www.ericholscher.com/blog/2016/oct/6/authoring-documentation-with-semantic-meaning/
+:os: https://www.openstack.org/
+:rst: http://docutils.sourceforge.net/rst.html
+:sqlite: https://sqlite.org/
+:swift: https://docs.openstack.org/swift/
+:tox: https://tox.readthedocs.io/
+
+= Alexandre Figura's Website
+
+This repository contains the source code of my website. But not only! This is also a
+sandbox where I like to experiment new things, especially fancy testing strategies 🌶
+
+
+== Overview
+
+Written in Python (🐍), my website is based on:
+
+- {flask}[Flask]: for the web application itself,
+- {git}[Git]: to manage content and history,
+- {invoke}[Invoke]: to manage my website's life cycle (e.g., updates, deployment, etc.),
+- {swift}[OpenStack Swift]: to host my website in the Cloud.
+
+Even if my workflow (focusing on portability and cost reduction) is quite common
+nowadays, it was not the case when I started to work on this project:
+
+1. **I write my website's content into text files and manage them with Git**. Very easy
+   for edition: I don't have to install anything special on my computer. I can use my
+   favorite text editor, and I get a Content Management System for free with Git!
+2. Before running my website, **I load new content into a SQL database**, so it's easier
+   to perform (complex) queries inside the codebase,
+3. Finally, **I deploy my website as a set of static files in the Cloud**, rather than
+   running a traditional web server, so there is less maintenance work needed.
+
+I could have used a website generator to reach my goals, but I prefered to develop my
+very own one website, in order to sharpen my programming skills, and have something
+tailored to my needs (too much generators focus on making blogs only).
+
+
+=== Technical Part
+
+Under the hood, no magic, only technologies that I carefully selected for many reasons:
+
+- {flask}[Flask] instead of {django}[Django] for the sake of simplicity,
+- the {ascii}[Asciidoctor] format for my website's content, because {markdown}[Markdown]
+  lacks of {markup}[semantic markup] and {rst}[reStructuredText] can be hard to use,
+- a {sqlite}[SQLite] database to store the actual website's state, because it's very
+  easy to backup and reuse in different environments,
+- {inuit}[InuitCSS] for the design/CSS part, because I like the minimalist and OOP
+  approach, compared to other bloated UI libraries,
+- {os}[OpenStack] and not AWS & Co. because I prefer to support local Cloud providers,
+  and am really concerned about privacy on the Web in general 🕵
+
+
+== Getting Started
+
+Want to give it a try? The only things you need to install on your computer are
+**Python 3.7+** and {tox}[Tox]. Then you are ready to go with a couple of commands:
+
+[source,shell]
+----
+tox -e dev --notest && . venv/bin/activate  # Set-up a virtual env
+invoke demo  # To launch a demo server on http://localhost:5000
+----
+
+That's it (for the moment)! 😉
