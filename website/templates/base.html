@@ -1,0 +1,40 @@
+{% set active_page = active_page|default('home') %}
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <title>{% block title %}{% endblock %} · Alexandre Figura</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='stylesheet.css') }}">
+</head>
+<body>
+    <nav class="nav">
+        {% for page, name in [('home', "Home")]%}
+        <a class="nav__link{% if page == active_page %} nav__link--active{% endif %}" href="{{ url_for('.' ~ page) }}">
+            {{ name|title }}
+        </a>
+        {% endfor %}
+
+        <a class="nav__link nav__link--linkedin" href="https://www.linkedin.com/in/alexandrefigura/" target="_blank">
+            Resume
+        </a>
+
+        <a class="nav__link nav__link--github" href="https://github.com/arugifa" target="_blank">
+            Projects
+        </a>
+    </nav>
+
+    <main class="content">
+    {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <p>
+            Content licensed under the
+            <a class="footer__link" href="//creativecommons.org/licenses/by-nc/4.0/" rel="license" target="_blank">
+                Creative Commons BY-NC license
+            </a>
+        </p>
+    </footer>
+</body>
+</html>

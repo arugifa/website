@@ -1,0 +1,66 @@
+.nav {
+    @extend .o-list-inline;
+    @extend .u-margin-vertical;
+
+    text-align: center;
+}
+
+.nav:before {
+    /* To preload mouse-hover images. */
+    content: url("/static/github.png") url("/static/linkedin.png");
+    height: 0;
+    visibility: hidden;
+    width: 0;
+}
+
+.nav__link {
+    @extend .o-list-inline__item;
+    @extend .u-margin-horizontal;
+
+    @include inuit-font-size(24px);
+
+    color: black;
+    font-weight: bold;
+    text-decoration: none;
+
+    &:active,
+    &:focus,
+    &:hover {
+        text-decoration: underline;
+    }
+}
+
+.nav__link--active {
+    color: blue;
+}
+
+.nav__link--external {
+    background-repeat: no-repeat;
+    background-position: left center;
+    line-height: 32px;
+    padding-left: 38px;
+}
+
+.nav__link--github {
+    @extend .nav__link--external;
+
+    background-image: url("/static/github_bw.png");
+
+    &:active,
+    &:focus,
+    &:hover {
+        background-image: url("/static/github.png");
+    }
+}
+
+.nav__link--linkedin {
+    @extend .nav__link--external;
+
+    background-image: url("/static/linkedin_bw.png");
+
+    &:active,
+    &:focus,
+    &:hover {
+        background-image: url("/static/linkedin.png");
+    }
+}

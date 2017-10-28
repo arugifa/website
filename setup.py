@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='website',
+    name='arugifa-website',
     version='0.0.0',
     description='Source code of my website',
     url='https://github.com/arugifa/website',
@@ -15,6 +15,14 @@ setup(
     ],
     packages=find_packages(),
     install_requires=[
+        'beautifulsoup4',
+        'factory_boy>=2.9',
         'flask>=0.12',
+        'flask-sqlalchemy>=2.3',
+        'frozen-flask>=0.15',
+        'invoke>=0.22',
+        # Rackspace SDK is not compatible with Openstack SDK 0.10
+        'openstacksdk>=0.9,<0.10',
+        'rackspacesdk>=0.7',
     ],
 )

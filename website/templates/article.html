@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}{{ article.title }}{% endblock %}
+
+{% block content %}
+    <article class="article">
+        <header>
+            <h1 class="article__title">{{ article.title }}</h1>
+            <p class="article__teaser">{{ article.teaser }}</p>
+        </header>
+
+        {{ article.content|safe }}
+
+        <footer>
+            <p>Published on <time class="article__publication">{{ article.publication }}</time></p>
+            {% if article.last_update and article.last_update != article.publication %}
+            <p>Updated on <time class="article__update">{{ article.last_update }}</time></p>
+            {% endif %}
+        </footer>
+    </article>
+{% endblock content %}

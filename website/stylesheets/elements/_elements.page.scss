@@ -1,0 +1,9 @@
+html {
+    background-color: #f5f5f5;
+    font-family: sans-serif;
+}
+
+body {
+    @extend .o-wrapper;
+    @extend .u-2\/3;
+}
