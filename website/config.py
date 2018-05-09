@@ -3,6 +3,7 @@ from pathlib import Path
 
 
 class DefaultConfig:
+    #: Database URI.
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
 
     # TODO: Do not set manually a default value.
@@ -16,40 +17,39 @@ class DefaultConfig:
 
 
 class DevelopmentConfig(DefaultConfig):
+    #: Forward errors to web clients, and auto-reload source code.
     DEBUG = True
-    FREEZER_DESTINATION = Path(__file__).parents[1] / 'build'
-    FREEZER_IGNORE_404_NOT_FOUND = True  # For RackSpace 404 error page
+    #: Where to store the static version of the website.
+    FREEZER_DESTINATION = Path(__file__).parents[1] / 'frozen'
+    #: Ignore HTTP 404 errors, as we need a 404 page for RackSpace Cloud Files.
+    FREEZER_IGNORE_404_NOT_FOUND = True
+    # TODO: explain why we raise...
+    #: Raise an error when finding an HTTP redirection.
     FREEZER_REDIRECT_POLICY = 'error'
 
-    # The database file's path can be given as an environment variable.
-    # If the path is relative, it will first be made absolute in order to
-    # avoid to create the database next to the source code (default behavior
-    # of Flask-SQLAlchemy).
-    #
-    # Also, by default and for troubleshooting purpose, we do not store
-    # the database in memory. It is hence possible to launch a demo server
-    # and debug the application by launching a shell in parallel.
-    DATABASE_DEFAULT_PATH = Path('/tmp/website.sqlite')
-    DATABASE_USER_PATH_ENV = 'WEBSITE_DB'
-    DATABASE_USER_PATH = None
-    SQLALCHEMY_DATABASE_URI = None
+    #: Database's path can be set via an environment variable.
+    DATABASE_PATH_ENV = 'WEBSITE_DB'
+    #: Database's path can also be given at runtime,
+    #: in which case it overrides any value set via the environment variable.
+    DATABASE_PATH = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        if self.DATABASE_USER_PATH is None:
-            db_path = os.environ.get(self.DATABASE_USER_PATH_ENV)
+        self.DATABASE_PATH = \
+            self.DATABASE_PATH or os.environ.get(self.DATABASE_PATH_ENV)
 
-            if db_path is not None:
-                self.DATABASE_USER_PATH = Path(db_path).resolve()
+        # Ensure database's path is absolute, to avoid Flask-SQLAlchemy
+        # to create the database next to the source code.
+        try:
+            self.DATABASE_PATH = Path(self.DATABASE_PATH).resolve()
+        except TypeError:
+            # If no database's path is defined, use in-memory database.
+            pass
         else:
-            # Ensure database's path is absolute, to avoid Flask-SQLAlchemy
-            # to create the database next to the source code.
-            self.DATABASE_USER_PATH = self.DATABASE_USER_PATH.resolve()
-
-        self.SQLALCHEMY_DATABASE_URI = 'sqlite:///{}'.format(
-            self.DATABASE_USER_PATH or self.DATABASE_DEFAULT_PATH)
+            self.SQLALCHEMY_DATABASE_URI = f'sqlite:///{self.DATABASE_PATH}'
 
 
 class TestingConfig(DefaultConfig):
+    #: Let raise exceptions.
     TESTING = True

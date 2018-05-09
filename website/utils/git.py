@@ -16,11 +16,16 @@ def parse_diff(diff):
         else:
             changes[status[0]].append(files[0])
 
-    return changes
+    return (
+        changes['A'],  # New files
+        changes['M'],  # Modified files
+        changes['R'],  # Renamed files
+        changes['D'],  # Deleted files
+    )
 
 
-def print_diff(diff, stream=sys.stdout):
-    def print_files(files):
+def print_diff(new, modified, renamed, deleted, stream=sys.stdout):
+    def print_files(action, files):
         if files:
             print(f'The following files will be {action}:', file=stream)
 
@@ -32,7 +37,7 @@ def print_diff(diff, stream=sys.stdout):
                 else:
                     print(f'- {f}', file=stream)
 
-    print_files('imported', diff['A'])
-    print_files('updated', diff['M'])
-    print_files('renamed', diff['R'])
-    print_files('removed', diff['D'])
+    print_files('imported', new)
+    print_files('updated', modified)
+    print_files('renamed', renamed)
+    print_files('removed', deleted)

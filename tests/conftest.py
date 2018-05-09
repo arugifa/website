@@ -2,13 +2,14 @@ import pytest
 import webtest
 from rackspace.connection import Connection
 
-from website import models
+from website import db as _db
 from website.cloud.factories import BaseCloudFactory
 from website.cloud.helpers import retrieve_test_containers
 from website.cloud.stubs import ConnectionStub
 from website.config import TestingConfig
 from website.helpers import create_app
-from website.test import CommandLine, FixtureMarker, InvokeContextStub
+from website.test.integration import CommandLine, InvokeContextStub
+from website.test.pytest import FixtureMarker
 
 integration_test = FixtureMarker()
 
@@ -98,9 +99,9 @@ def db(app):
     # Didn't find a way yet to make it work.
 
     with app.app_context():
-        models.db.create_all()
-        yield models.db
-        models.db.drop_all()
+        _db.create_all()
+        yield _db
+        _db.drop_all()
 
 
 @pytest.fixture(scope='session')

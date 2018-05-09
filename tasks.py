@@ -8,18 +8,18 @@ from openstack.exceptions import SDKException
 from rackspace.connection import Connection
 
 from website.cloud.stubs import ConnectionStub
+from website.cloud.utils import (
+    connect_to_the_cloud, delete_outdated_files, retrieve_container,
+    retrieve_objects, upload_existing_files, upload_new_files)
 from website.config import DevelopmentConfig
 from website.helpers import create_app
 from website.models import Article
 from website.models import db as _db
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
 from website.utils.blog import add_article, update_article
-from website.utils.cloud import (
-    connect_to_the_cloud, delete_outdated_files, retrieve_container,
-    retrieve_objects, upload_existing_files, upload_new_files)
 from website.utils.demo import setup_demo
 from website.utils.documents import (
-    add_documents, delete_documents, rename_documents, update_documents)
+    insert_documents, delete_documents, rename_documents, update_documents)
 from website.utils.git import parse_diff, print_diff
 
 here = Path(__file__).parent
@@ -32,7 +32,7 @@ SASS_FILE = SOURCE_CODE / 'stylesheets/main.scss'
 MODELS = {
     'blog': Article,
 }
-ADD_CALLBACKS = {
+INSERT_CALLBACKS = {
     'blog': add_article,
 }
 UPDATE_CALLBACKS = {
@@ -66,13 +66,6 @@ def demo(ctx):
     The server runs on port 5000.
     """
     app = create_app(DevelopmentConfig)
-    db = app.config['DATABASE_USER_PATH']
-
-    if db is not None and db.exists():
-        print(f"A database already exists at {db}")
-        print("All data will be erased when launching the demo server!")
-        confirm()
-
     setup_demo(app)
 
 
@@ -110,8 +103,8 @@ def update(ctx, db, repository, commit='HEAD~1', force=False):
         output = ctx.run(cmdline, hide='stdout')
         diff = filter(bool, output.stdout.split('\n'))
 
-    updated_files = parse_diff(diff)
-    print_diff(updated_files)
+    new, modified, renamed, deleted = parse_diff(diff)
+    print_diff(new, modified, renamed, deleted)
 
     if not force:
         confirm()
@@ -119,11 +112,10 @@ def update(ctx, db, repository, commit='HEAD~1', force=False):
     document_reader = AsciidoctorToHTMLConverter(ctx)
     try:
         with app.app_context():
-            add_documents(
-                updated_files['A'], _db, ADD_CALLBACKS, document_reader)
-            rename_documents(updated_files['R'], document_reader)
-            update_documents(updated_files['M'], document_reader)
-            delete_documents(updated_files['D'], _db)
+            insert_documents(new, _db, INSERT_CALLBACKS, document_reader)
+            update_documents(modified, document_reader)
+            rename_documents(renamed, document_reader)
+            delete_documents(deleted, _db)
 
     except Exception:
         with app.app_context():

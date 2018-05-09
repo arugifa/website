@@ -1,6 +1,6 @@
 from flask import Blueprint, abort, render_template
 
-from .models import Article
+from .models.blog import Article
 
 # Even if the website doesn't need to be modular,
 # we create a blueprint here as we cannot access to

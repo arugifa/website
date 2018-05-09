@@ -36,6 +36,10 @@ def test_add_article():
     assert article.publication == date(2018, 4, 8)
 
 
+def test_update_article():
+    pass
+
+
 def test_retrieve_article_title():
     content = '<h1>Article Title</h1>'
     soup = BeautifulSoup(content, 'html.parser')

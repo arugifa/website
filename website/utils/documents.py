@@ -6,12 +6,12 @@ logger = logging.getLogger(__name__)
 
 # Documents Editing
 
-def add_documents(files, db, callbacks, reader=open):
+def insert_documents(paths, db, callbacks, reader=open):
     """Add documents into the database.
 
     Should be called from inside a Flask application's context.
     """
-    for path in files:
+    for path in paths:
         document_type = retrieve_document_type(path)
         content = reader(path).read()
 
@@ -19,8 +19,9 @@ def add_documents(files, db, callbacks, reader=open):
             create = callbacks[document_type]
         except KeyError:
             logger.error(
-                'No callback defined to add "%s" documents',
-                document_type)
+                'Cannot insert "%s" into database: '
+                'no callback defined for "%s"',
+                path, document_type)
 
         document = create(path, content)
         db.session.add(document)

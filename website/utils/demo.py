@@ -1,6 +1,6 @@
-from . import factories
-from .helpers import create_articles
-from .models import db
+from website import factories
+from website.helpers import create_articles
+from website.models import db
 
 
 def setup_demo(app, item_count=10):

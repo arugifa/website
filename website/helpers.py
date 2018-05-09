@@ -5,8 +5,8 @@ from flask import Flask
 import jinja2
 from werkzeug.datastructures import ImmutableDict
 
-from .factories import ArticleFactory
-from .models import db
+from . import db
+from .factories.blog import ArticleFactory
 from .views import website
 
 
