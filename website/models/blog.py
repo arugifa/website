@@ -29,7 +29,7 @@ class Article(Document):
 
     tags = db.relationship('Tag', secondary=tags, backref='articles')
 
-    teaser = db.Column(db.String, nullable=False)
+    introduction = db.Column(db.String, nullable=False)
 
     @classmethod
     def latest(cls):

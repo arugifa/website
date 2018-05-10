@@ -1,14 +1,18 @@
 import os
-from pathlib import PurePath
 import signal
-from subprocess import CalledProcessError, Popen
+from subprocess import CalledProcessError
 import time
 
 import pytest
 import requests
+from bs4 import BeautifulSoup
 from requests.exceptions import ConnectionError
 
+from website import db as _db
 from website.config import DevelopmentConfig
+from website.helpers import create_app
+
+WEB_SERVER_URL = 'http://localhost:5000'
 
 
 # Tests
@@ -41,34 +45,43 @@ class TestFreeze:
         assert frozen.check() > 0
         assert len(frozen.listdir()) > 0
 
-    def test_preview(self, invoke, monkeypatch):
-        check_server('freeze --preview', monkeypatch)
+    def test_preview(self, invoke):
+        check_server_is_running(invoke, 'freeze --preview')
 
 
-def test_demo(invoke, monkeypatch):
-    check_server('demo', monkeypatch)
+class TestDemo:
+    def test_in_memory_database_is_populated(self, invoke):
+        response = check_server_is_running(invoke, 'demo')
+        assert len(response.select('.article-list__item')) > 0
+
+    def test_on_disk_database_is_not_overwritten(
+            self, invoke, monkeypatch, tmpdir):
+        db = tmpdir.ensure('test.db')
+
+        config = DevelopmentConfig(DATABASE_PATH=db)
+        app = create_app(config)
+
+        with app.app_context():
+            _db.create_all()
+        last_update = db.mtime()
+
+        monkeypatch.setenv(DevelopmentConfig.DATABASE_PATH_ENV, db)
+        check_server_is_running(invoke, 'demo')
+
+        assert db.mtime() == last_update
 
 
-def test_run(invoke, monkeypatch):
-    check_server('run', monkeypatch)
+def test_run(invoke):
+    check_server_is_running(invoke, 'run')
 
 
 # Helpers
 
-def check_server(cmdline, monkeypatch):
-    # Ensure WEBSITE_DB is not set before launching the demo server.
-    # Otherwise, a prompt would be displayed to confirm overwriting
-    # the database if exists.
-    monkeypatch.delenv(
-        DevelopmentConfig.DATABASE_USER_PATH_ENV, raising=False)
-
-    cmdline = cmdline.split()
-    cmdline.insert(0, 'invoke')
-
+def check_server_is_running(invoke, task):
     # Thanks to https://pymotw.com/2/subprocess/#process-groups-sessions
-    server = Popen(
-        cmdline,
-        preexec_fn=os.setsid)  # To kill child processes
+    server = invoke.run_with_popen(
+        task,
+        preexec_fn=os.setsid)  # To kill web server launched as a child process
 
     try:
         for retry in range(19, -1, -1):
@@ -76,12 +89,13 @@ def check_server(cmdline, monkeypatch):
             # Waiting for 2 seconds maximum is a completely arbitrary choice.
             try:
                 # Should not raise.
-                requests.get('http://localhost:5000').raise_for_status()
+                response = requests.get(WEB_SERVER_URL)
+                response.raise_for_status()
             except ConnectionError as exc:
                 if not retry:
                     raise exc
                 time.sleep(0.1)
             else:
-                break
+                return BeautifulSoup(response.text, 'html.parser')
     finally:
         os.killpg(server.pid, signal.SIGTERM)

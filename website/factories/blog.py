@@ -19,7 +19,7 @@ class ArticleFactory(DocumentFactory):
         model = models.Article
 
     title = Sequence(lambda n: f"Article {n}")
-    teaser = "This is the article's teaser."
+    introduction = "This is the article's introduction."
     content = "<p>This is the article's content.</p>"
     category = SubFactory(CategoryFactory)
     tags = List([SubFactory(TagFactory) for _ in range(2)])

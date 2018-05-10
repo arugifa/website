@@ -27,6 +27,10 @@ def create_app(config):
     db.init_app(app)
     app.register_blueprint(website)
 
+    if not app.config['DATABASE_PATH']:
+        with app.app_context():
+            db.create_all()
+
     return app
 
 
@@ -39,5 +43,5 @@ def create_articles(count):
     """
     today = date.today()
     return [
-        ArticleFactory(publication=today - timedelta(days=days))
+        ArticleFactory(publication_date=today - timedelta(days=days))
         for days in range(count, 0, -1)]

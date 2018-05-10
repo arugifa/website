@@ -5,14 +5,14 @@
     <article class="article">
         <header>
             <h1 class="article__title">{{ article.title }}</h1>
-            <p class="article__teaser">{{ article.teaser }}</p>
+            <p class="article__teaser">{{ article.introduction }}</p>
         </header>
 
         {{ article.content|safe }}
 
         <footer>
-            <p>Published on <time class="article__publication">{{ article.publication }}</time></p>
-            {% if article.last_update and article.last_update != article.publication %}
+            <p>Published on <time class="article__publication">{{ article.publication_date }}</time></p>
+            {% if article.last_update and article.last_update != article.publication_date %}
             <p>Updated on <time class="article__update">{{ article.last_update }}</time></p>
             {% endif %}
         </footer>

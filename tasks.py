@@ -7,14 +7,14 @@ from invoke import task
 from openstack.exceptions import SDKException
 from rackspace.connection import Connection
 
+from website import db as _db
 from website.cloud.stubs import ConnectionStub
 from website.cloud.utils import (
     connect_to_the_cloud, delete_outdated_files, retrieve_container,
     retrieve_objects, upload_existing_files, upload_new_files)
 from website.config import DevelopmentConfig
 from website.helpers import create_app
-from website.models import Article
-from website.models import db as _db
+from website.models.blog import Article
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
 from website.utils.blog import add_article, update_article
 from website.utils.demo import setup_demo
@@ -55,18 +55,27 @@ def confirm():
 
 @task
 def run(ctx):
+    """Run the website.
+
+    The web server can be accessed on http://localhost:5000/
+    """
     env = {'FLASK_APP': FLASK_APP, 'FLASK_DEBUG': '1'}
     ctx.run('flask run', env=env)
 
 
-@task(post=[run])
+@task
 def demo(ctx):
     """Launch a demo server, with some data to play with.
 
-    The server runs on port 5000.
+    The server can be accessed on http://localhost:5000/
     """
     app = create_app(DevelopmentConfig)
-    setup_demo(app)
+
+    if not app.config['DATABASE_PATH']:
+        # To not overwrite a database set via environment variables.
+        setup_demo(app)
+
+    app.run(debug=True, use_reloader=False)
 
 
 # Utils

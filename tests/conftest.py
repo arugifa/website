@@ -8,7 +8,7 @@ from website.cloud.helpers import retrieve_test_containers
 from website.cloud.stubs import ConnectionStub
 from website.config import TestingConfig
 from website.helpers import create_app
-from website.test.integration import CommandLine, InvokeContextStub
+from website.test.integration import CommandLine, InvokeStub
 from website.test.pytest import FixtureMarker
 
 integration_test = FixtureMarker()
@@ -113,4 +113,4 @@ def invoke():
 @pytest.fixture(scope='session')
 @integration_test
 def invoke_ctx():
-    return InvokeContextStub()
+    return InvokeStub()

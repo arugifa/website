@@ -42,10 +42,13 @@ class DevelopmentConfig(DefaultConfig):
         # Ensure database's path is absolute, to avoid Flask-SQLAlchemy
         # to create the database next to the source code.
         try:
-            self.DATABASE_PATH = Path(self.DATABASE_PATH).resolve()
+            self.DATABASE_PATH = Path(self.DATABASE_PATH).resolve(strict=True)
         except TypeError:
             # If no database's path is defined, use in-memory database.
             pass
+        except FileNotFoundError:
+            error = f"No database found at {self.DATABASE_PATH}"
+            raise FileNotFoundError(error)
         else:
             self.SQLALCHEMY_DATABASE_URI = f'sqlite:///{self.DATABASE_PATH}'
 

@@ -19,6 +19,5 @@ To play with the web application::
 
     $ pytest  # To launch the tests manually
 
-    $ export FLASK_APP=manage.py
-    $ flask demo   # To launch the demo server
-    $ flask shell  # To interact with the application
+    $ WEBSITE_DB=~/website.db
+    $ invoke demo   # To launch the demo server

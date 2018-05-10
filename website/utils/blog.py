@@ -2,7 +2,7 @@ from datetime import date
 
 from bs4 import BeautifulSoup
 
-from website.models import Article
+from website.models.blog import Article
 
 from .documents import retrieve_document_date, retrieve_document_uri
 

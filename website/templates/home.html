@@ -8,8 +8,8 @@
             <h1><a class="article-list__title" href="{{ url_for('.article', uri=article.uri) }}">
                 {{ article.title }}
             </a></h1>
-            <p class="article-list__teaser">{{ article.teaser }}</p>
-            <p><time class="article-list__publication">{{ article.publication }}</time></p>
+            <p class="article-list__teaser">{{ article.introduction }}</p>
+            <p><time class="article-list__publication">{{ article.publication_date }}</time></p>
         </article>
         {% endfor %}
     </section>

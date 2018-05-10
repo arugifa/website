@@ -1,4 +1,6 @@
-from pathlib import Path, PurePath
+from pathlib import PurePath
+
+import pytest
 
 from website import config
 
@@ -32,30 +34,52 @@ class TestDefaultConfig(BaseTestConfig):
 class TestDevelopmentConfig(BaseTestConfig):
     config_class = config.DevelopmentConfig
 
-    def test_can_set_database_via_environment_variable(self, monkeypatch):
-        monkeypatch.setenv('WEBSITE_DB', '/tmp/test.db')
+    @pytest.fixture
+    def db_path(self, tmpdir):
+        return PurePath(tmpdir.ensure('test.db'))
+
+    def test_can_set_database_via_environment_variable(
+            self, db_path, monkeypatch):
+        monkeypatch.setenv('WEBSITE_DB', db_path)
         config = self.config_class()
-        assert str(config.DATABASE_PATH) == '/tmp/test.db'
 
-    def test_can_define_database_path_at_runtime(self):
-        config = self.config_class(DATABASE_PATH='/tmp/test.db')
-        assert str(config.DATABASE_PATH) == '/tmp/test.db'
+        assert config.DATABASE_PATH == db_path
+        assert config.SQLALCHEMY_DATABASE_URI == f'sqlite:///{db_path}'
 
-    def test_runtime_value_for_database_overwrittes_environment_variable(
-            self, monkeypatch):
+    def test_can_define_database_path_at_runtime(self, db_path):
+        config = self.config_class(DATABASE_PATH=db_path)
+        assert config.DATABASE_PATH == db_path
+        assert config.SQLALCHEMY_DATABASE_URI == f'sqlite:///{db_path}'
+
+    def test_runtime_value_for_database_path_overwrittes_environment_variable(
+            self, db_path, monkeypatch):
         monkeypatch.setenv('WEBSITE_DB', '/tmp/test_env.db')
-        config = self.config_class(DATABASE_PATH='/tmp/test_runtime.db')
-        assert str(config.DATABASE_PATH) == '/tmp/test_runtime.db'
+        config = self.config_class(DATABASE_PATH=db_path)
+        assert config.DATABASE_PATH == db_path
 
-    def test_relative_database_path_is_made_absolute(self):
-        config = self.config_class(DATABASE_PATH='test.db')
-        expected = str(Path.cwd() / 'test.db')
-        assert str(config.DATABASE_PATH) == expected
+    def test_relative_database_path_is_made_absolute(
+            self, db_path, monkeypatch):
+        db_file = db_path.name
 
-    def test_can_use_path_object_or_string_for_database_path(self):
+        monkeypatch.chdir(db_path.parent)
+        config = self.config_class(DATABASE_PATH=db_file)
+
+        assert config.DATABASE_PATH == db_path
+
+    def test_can_use_path_object_or_string_for_database_path(self, db_path):
         # Should not raise.
-        self.config_class(DATABASE_PATH=PurePath('/tmp/test.db'))
-        self.config_class(DATABASE_PATH='/tmp/test.db')
+        self.config_class(DATABASE_PATH=db_path)
+        self.config_class(DATABASE_PATH=str(db_path))
+
+    def test_in_memory_database_is_used_by_default(self):
+        config = self.config_class()
+        assert config.SQLALCHEMY_DATABASE_URI == 'sqlite:///:memory:'
+
+    def test_exception_is_raised_when_database_does_not_exist(self, tmpdir):
+        db_path = tmpdir.join('test.db')
+
+        with pytest.raises(FileNotFoundError):
+            self.config_class(DATABASE_PATH=db_path)
 
 
 class TestTestingConfig(BaseTestConfig):
