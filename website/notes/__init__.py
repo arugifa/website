@@ -1,0 +1,5 @@
+from flask import Blueprint
+
+notes = Blueprint('notes', __name__, template_folder='templates')
+
+from . import views  # noqa: E402, F401

@@ -1,6 +1,6 @@
 from website import db
 
-from .base import BaseModel
+from website.models import BaseModel
 
 
 class RecommendedMaterial(BaseModel):

@@ -1,8 +1,8 @@
 from factory import List, Sequence, SubFactory
 
-from website.models import notes as models
+from website.factories import DocumentFactory, TagFactory
 
-from .documents import DocumentFactory, TagFactory
+from . import models
 
 
 class NoteFactory(DocumentFactory):

@@ -1,10 +1,12 @@
 import os
 from pathlib import Path
 
+IN_MEMORY_DATABASE = 'sqlite:///:memory:'
+
 
 class DefaultConfig:
     #: Database URI.
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+    SQLALCHEMY_DATABASE_URI = IN_MEMORY_DATABASE
 
     # TODO: Do not set manually a default value.
     # For now, Flask-SQLAlchemy prints a warning when this setting is not set.

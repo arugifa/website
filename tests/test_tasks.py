@@ -8,9 +8,8 @@ import requests
 from bs4 import BeautifulSoup
 from requests.exceptions import ConnectionError
 
-from website import db as _db
+from website import create_app, db as _db
 from website.config import DevelopmentConfig
-from website.helpers import create_app
 
 WEB_SERVER_URL = 'http://localhost:5000'
 
@@ -57,7 +56,6 @@ class TestDemo:
     def test_on_disk_database_is_not_overwritten(
             self, invoke, monkeypatch, tmpdir):
         db = tmpdir.ensure('test.db')
-
         config = DevelopmentConfig(DATABASE_PATH=db)
         app = create_app(config)
 

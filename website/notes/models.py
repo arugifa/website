@@ -1,6 +1,6 @@
 from website import db
 
-from .documents import Document
+from website.models import Document
 
 
 tags = db.Table(

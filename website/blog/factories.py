@@ -1,9 +1,9 @@
 from factory import List, Sequence, SubFactory
 
-from website.models import blog as models
+from website.factories import (
+    BaseSQLAlchemyFactory, DocumentFactory, TagFactory)
 
-from .base import BaseSQLAlchemyFactory
-from .documents import DocumentFactory, TagFactory
+from . import models
 
 
 class CategoryFactory(BaseSQLAlchemyFactory):

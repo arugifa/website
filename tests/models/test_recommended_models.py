@@ -1,5 +1,4 @@
-from website.factories import recommended as factories
-from website.models import recommended as models
+from website.recommended import factories, models
 from website.test.models import BaseTestRecommendedModel
 
 

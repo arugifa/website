@@ -1,7 +1,6 @@
 from datetime import date, timedelta
 
-from website.factories import blog as factories
-from website.models import blog as models
+from website.blog import factories, models
 from website.test.models import BaseTestDocumentModel, BaseTestModel
 
 

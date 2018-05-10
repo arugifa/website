@@ -1,4 +1,4 @@
-from website.helpers import create_articles
+from website.blog.helpers import create_articles
 
 
 def setup_demo(app, item_count=10):

@@ -1,7 +1,6 @@
 from website import db
 
-from .base import BaseModel
-from .documents import Document
+from website.models import BaseModel, Document
 
 
 tags = db.Table(

@@ -1,5 +1,4 @@
-from website.factories import notes as factories
-from website.models import notes as models
+from website.notes import factories, models
 from website.test.models import BaseTestDocumentModel
 
 

@@ -2,12 +2,11 @@ import pytest
 import webtest
 from rackspace.connection import Connection
 
-from website import db as _db
+from website import create_app, db as _db
 from website.cloud.factories import BaseCloudFactory
 from website.cloud.helpers import retrieve_test_containers
 from website.cloud.stubs import ConnectionStub
 from website.config import TestingConfig
-from website.helpers import create_app
 from website.test.integration import CommandLine, InvokeStub
 from website.test.pytest import FixtureMarker
 

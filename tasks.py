@@ -7,14 +7,13 @@ from invoke import task
 from openstack.exceptions import SDKException
 from rackspace.connection import Connection
 
-from website import db as _db
+from website import create_app, db as _db
+from website.blog.models import Article
 from website.cloud.stubs import ConnectionStub
 from website.cloud.utils import (
     connect_to_the_cloud, delete_outdated_files, retrieve_container,
     retrieve_objects, upload_existing_files, upload_new_files)
 from website.config import DevelopmentConfig
-from website.helpers import create_app
-from website.models.blog import Article
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
 from website.utils.blog import add_article, update_article
 from website.utils.demo import setup_demo
@@ -27,7 +26,7 @@ here = Path(__file__).parent
 SOURCE_CODE = here / 'website'
 CSS_FILE = SOURCE_CODE / 'static/stylesheet.css'
 FLASK_APP = here / 'manage.py'
-FROZEN_WEBSITE = here / 'build'
+FROZEN_WEBSITE = here / 'frozen'
 SASS_FILE = SOURCE_CODE / 'stylesheets/main.scss'
 MODELS = {
     'blog': Article,
@@ -58,9 +57,16 @@ def run(ctx):
     """Run the website.
 
     The web server can be accessed on http://localhost:5000/
+
+    Let Flask runs the server, otherwise automatic reloading does not work
+    properly. See http://flask.pocoo.org/docs/latest/api/#flask.Flask.run
+    for more info.
     """
-    env = {'FLASK_APP': FLASK_APP, 'FLASK_DEBUG': '1'}
-    ctx.run('flask run', env=env)
+    # Cannot type commands in the interpreter.
+    # env = {'FLASK_APP': FLASK_APP, 'FLASK_DEBUG': '1'}
+    # ctx.run('flask run', env=env)
+    app = create_app(DevelopmentConfig)
+    app.run(debug=True)
 
 
 @task

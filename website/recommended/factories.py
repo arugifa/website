@@ -1,8 +1,8 @@
 from factory import Sequence
 
-from website.models import recommended as models
+from website.factories import BaseSQLAlchemyFactory
 
-from .base import BaseSQLAlchemyFactory
+from . import models
 
 
 class RecommendedArticleFactory(BaseSQLAlchemyFactory):
