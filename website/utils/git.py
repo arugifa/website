@@ -1,4 +1,14 @@
 import sys
+from collections import defaultdict
+from pathlib import PurePath
+
+from . import default_runner
+
+
+def get_diff(from_commit, to_commit='HEAD', run=default_runner):
+    cmdline = f'git diff --name-status {from_commit}..{to_commit}'
+    output = run(cmdline).stdout
+    return [filter(bool, output.stdout.split('\n'))]
 
 
 def parse_diff(diff):

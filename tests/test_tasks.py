@@ -28,7 +28,7 @@ class TestCreateDB:
         invoke.run(f'create-db {db}')
         assert db.size() > 0
 
-    def test_overwrite_db(self, invoke, tmpdir):
+    def test_cannot_overwrite_existing_db(self, invoke, tmpdir):
         db = tmpdir.join('test.db')
         db.ensure()
 

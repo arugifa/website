@@ -13,10 +13,10 @@ tests/acceptance/screenshots/
 venv/
 
 # Flask
-static/
+website/static/
 
 # Frozen-Flask
-build/
+frozen/
 
 # Bower
 bower_components/

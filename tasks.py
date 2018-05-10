@@ -1,4 +1,5 @@
 import logging
+from functools import partial
 from pathlib import Path
 from sys import exit
 
@@ -15,11 +16,12 @@ from website.cloud.utils import (
     retrieve_objects, upload_existing_files, upload_new_files)
 from website.config import DevelopmentConfig
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
-from website.utils.blog import add_article, update_article
+from website.utils.blog import (
+    add_article, delete_article, rename_article, update_article)
 from website.utils.demo import setup_demo
 from website.utils.documents import (
     insert_documents, delete_documents, rename_documents, update_documents)
-from website.utils.git import parse_diff, print_diff
+from website.utils.git import get_diff, parse_diff, print_diff
 
 here = Path(__file__).parent
 
@@ -36,6 +38,12 @@ INSERT_CALLBACKS = {
 }
 UPDATE_CALLBACKS = {
     'blog', update_article,
+}
+RENAME_CALLBACKS = {
+    'blog', rename_article,
+}
+DELETE_CALLBACKS = {
+    'blog', delete_article,
 }
 
 
@@ -88,17 +96,20 @@ def demo(ctx):
 
 @task
 def compile_css(ctx, css_file=CSS_FILE, style='compact'):
+    """Compile SASS files to a CSS stylesheet."""
     ctx.run(f'sassc -t {style} {SASS_FILE} {css_file}')
 
 
 @task
 def create_db(ctx, path):
+    """Create and initialize database."""
     path = Path(path)
 
     if path.exists():
         exit("Database already exists!")
 
-    config = DevelopmentConfig(DATABASE_USER_PATH=path)
+    path.touch()
+    config = DevelopmentConfig(DATABASE_PATH=path)
     app = create_app(config)
 
     with app.app_context():
@@ -107,16 +118,13 @@ def create_db(ctx, path):
 
 @task
 def update(ctx, db, repository, commit='HEAD~1', force=False):
-    db = Path(db).resolve()
     repository = Path(repository).resolve()
-
-    config = DevelopmentConfig(DATABASE_USER_PATH=db)
+    config = DevelopmentConfig(DATABASE_PATH=db)
     app = create_app(config)
 
+    runner = partial(ctx.run, hide='stdout')
     with ctx.cd(repository):
-        cmdline = f'git diff --name-status {commit}..HEAD'
-        output = ctx.run(cmdline, hide='stdout')
-        diff = filter(bool, output.stdout.split('\n'))
+        diff = get_diff(commit, runner)
 
     new, modified, renamed, deleted = parse_diff(diff)
     print_diff(new, modified, renamed, deleted)
@@ -124,22 +132,20 @@ def update(ctx, db, repository, commit='HEAD~1', force=False):
     if not force:
         confirm()
 
-    document_reader = AsciidoctorToHTMLConverter(ctx)
+    reader = AsciidoctorToHTMLConverter(runner)
     try:
         with app.app_context():
-            insert_documents(new, _db, INSERT_CALLBACKS, document_reader)
-            update_documents(modified, document_reader)
-            rename_documents(renamed, document_reader)
-            delete_documents(deleted, _db)
+            insert_documents(new, INSERT_CALLBACKS, reader)
+            update_documents(modified, UPDATE_CALLBACKS, reader)
+            rename_documents(renamed, RENAME_CALLBACKS, reader)
+            delete_documents(deleted, DELETE_CALLBACKS)
+            _db.session.commit()
 
     except Exception:
         with app.app_context():
             _db.session.rollback()
 
         exit("No change has been made to the database")
-
-    with app.app_context():
-        _db.session.commit()
 
 
 # Deployment

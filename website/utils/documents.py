@@ -1,16 +1,15 @@
 import logging
 from datetime import date
 
+from website import db
+
 logger = logging.getLogger(__name__)
 
 
 # Documents Editing
 
-def insert_documents(paths, db, callbacks, reader=open):
-    """Add documents into the database.
-
-    Should be called from inside a Flask application's context.
-    """
+def insert_documents(paths, callbacks, reader=open, prompt=input):
+    """Add documents into the database."""
     for path in paths:
         document_type = retrieve_document_type(path)
         content = reader(path).read()
@@ -23,71 +22,78 @@ def insert_documents(paths, db, callbacks, reader=open):
                 'no callback defined for "%s"',
                 path, document_type)
 
-        document = create(path, content)
+        document = create(path, content, prompt)
         db.session.add(document)
 
 
-def delete_documents(files, db):
-    """Delete documents from the database.
+def delete_documents(paths, callbacks):
+    """Delete documents from the database."""
 
-    Should be called from inside a Flask application's context.
-    """
-    for path in files:
-        document = load_document(path)
-        db.session.delete(document)
-
-
-def rename_documents(files, reader=open):
-    """Rename documents inside the database.
-
-    Should be called from inside a Flask application's context.
-    """
-    for paths in files:
-        src = paths[0].parents[0]
-        dst = paths[1].parents[0]
+    for path in paths:
+        document_type = retrieve_document_type(path)
 
         try:
-            assert src == dst
+            delete = callbacks[document_type]
+        except KeyError:
+            logger.error(
+                'Cannot remove "%s" from database: '
+                'no callback defined for "%s"',
+                path, document_type)
+
+        delete(path)
+
+
+def rename_documents(paths, callbacks, reader=open, prompt=input):
+    """Rename documents inside the database."""
+    for src, dst in paths:
+        try:
+            assert src.parent == dst.parent
         except AssertionError:
-            name = paths[0].name
             print(
-                f"Cannot move {name} from {src} to {dst}: "
+                f"Cannot move {src.name} from {src.parent} to {dst.parent}: "
                 "it should stay in the same top-level directory")
             raise
 
-        document = load_document(paths[0])
-        document_type = retrieve_document_type(path)
-        content = reader(paths[1]).read()
+        document_type = retrieve_document_type(dst)
+        content = reader(dst).read()
 
-        update = CONTENT_REPOSITORY[document_type]['update']
-        update(document, paths[1], content)
+        try:
+            rename = callbacks[document_type]
+        except KeyError:
+            logger.error(
+                'Cannot update "%s" into database: '
+                'no callback defined for "%s"',
+                paths[1], document_type)
+
+        rename(dst, content, prompt)
 
 
-def update_documents(files, reader=open):
-    """Update documents inside the database.
-
-    Should be called from inside a Flask application's context.
-    """
-    for path in files:
-        document = load_document(path)
+def update_documents(paths, callbacks, reader=open, prompt=input):
+    """Update documents inside the database."""
+    for path in paths:
         document_type = retrieve_document_type(path)
         content = reader(path).read()
 
-        update = CONTENT_REPOSITORY[document_type]['update']
-        update(document, path, content)
+        try:
+            update = callbacks[document_type]
+        except KeyError:
+            logger.error(
+                'Cannot update "%s" into database: '
+                'no callback defined for "%s"',
+                path, document_type)
+
+        update(path, content, prompt)
 
 
 # Document Processing
 
+"""
 def load_document(path):
-    """Load a document from the database.
-
-    Should be called from inside a Flask application's context.
-    """
     document_type = retrieve_document_type(path)
     model = CONTENT_DIRECTORIES[document_type]
     uri = retrieve_document_uri(path)
     return model.find(uri=uri)
+"""
 
 
 def retrieve_document_date(path):

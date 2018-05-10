@@ -1,4 +1,5 @@
 from datetime import date
+from collections.abc import Iterable
 
 import sqlalchemy
 
@@ -14,6 +15,20 @@ class BaseModel(db.Model):
         return cls.query.all()
 
     @classmethod
+    def filter(cls, **kwargs):
+        query = cls.query
+
+        for key, value in kwargs:
+            column = getattr(cls, key)
+
+            if isinstance(value, Iterable):
+                query = query.filter(column.in_(value))
+            else:
+                query = query.filter(column == value)
+
+        return query.all()
+
+    @classmethod
     def find(cls, **kwargs):
         """Search for a unique article.
 
@@ -26,6 +41,9 @@ class BaseModel(db.Model):
             return cls.query.filter_by(**kwargs).one_or_none()
         except sqlalchemy.orm.exc.MultipleResultsFound:
             raise MultipleResultsFound
+
+    def save(self):
+        db.session.add(self)
 
 
 class Document(BaseModel):
