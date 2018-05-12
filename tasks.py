@@ -21,7 +21,7 @@ from website.utils.blog import (
 from website.utils.demo import setup_demo
 from website.utils.documents import (
     insert_documents, delete_documents, rename_documents, update_documents)
-from website.utils.git import get_diff, parse_diff, print_diff
+from website.utils.git import get_diff, print_diff
 
 here = Path(__file__).parent
 
@@ -124,9 +124,8 @@ def update(ctx, db, repository, commit='HEAD~1', force=False):
 
     runner = partial(ctx.run, hide='stdout')
     with ctx.cd(repository):
-        diff = get_diff(commit, runner)
+        new, modified, renamed, deleted = get_diff(runner, commit)
 
-    new, modified, renamed, deleted = parse_diff(diff)
     print_diff(new, modified, renamed, deleted)
 
     if not force:

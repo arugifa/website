@@ -7,7 +7,8 @@ from website.cloud.factories import BaseCloudFactory
 from website.cloud.helpers import retrieve_test_containers
 from website.cloud.stubs import ConnectionStub
 from website.config import TestingConfig
-from website.test.integration import CommandLine, InvokeStub
+from website.test.integration import (
+    CommandLine, InvokeStub, ShellReal, ShellStub)
 from website.test.pytest import FixtureMarker
 
 integration_test = FixtureMarker()
@@ -113,3 +114,9 @@ def invoke():
 @integration_test
 def invoke_ctx():
     return InvokeStub()
+
+
+@pytest.fixture(params=[ShellStub, ShellReal])
+@integration_test
+def shell(request):
+    return request.param()

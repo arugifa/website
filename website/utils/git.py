@@ -2,19 +2,21 @@ import sys
 from collections import defaultdict
 from pathlib import PurePath
 
-from . import default_runner
 
+def get_diff(run, from_commit, to_commit='HEAD'):
+    """Return diff between two commits.
 
-def get_diff(from_commit, to_commit='HEAD', run=default_runner):
-    cmdline = f'git diff --name-status {from_commit}..{to_commit}'
-    output = run(cmdline).stdout
-    return [filter(bool, output.stdout.split('\n'))]
+    :param function run: callback for running ``git diff``.
+    :param str from_commit: commit to compare to.
+    :param str to_commit: reference commit.
+    """
+    diff = defaultdict(list)
 
+    cmdline = f'git diff --name-status {from_commit} {to_commit}'
+    # Discard last new line character.
+    output = run(cmdline).stdout.split('\n')[:-1]
 
-def parse_diff(diff):
-    changes = defaultdict(list)
-
-    for line in diff:
+    for line in output:
         status, *files = line.split('\t')
         files = [PurePath(f) for f in files]
 
@@ -22,15 +24,15 @@ def parse_diff(diff):
         # because when a file is renamed, the status is
         # followed by a score of similarity.
         if status[0] == 'R':
-            changes['R'].append(files)
+            diff['R'].append(files)
         else:
-            changes[status[0]].append(files[0])
+            diff[status[0]].append(files[0])
 
     return (
-        changes['A'],  # New files
-        changes['M'],  # Modified files
-        changes['R'],  # Renamed files
-        changes['D'],  # Deleted files
+        diff['A'],  # New files
+        diff['M'],  # Modified files
+        diff['R'],  # Renamed files
+        diff['D'],  # Deleted files
     )
 
 

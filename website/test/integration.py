@@ -28,3 +28,29 @@ class InvokeStub:
     def run(cmdline, **kwargs):
         cmdline = cmdline.split()
         return run(cmdline, stdout=PIPE, universal_newlines=True)
+
+
+class ShellStub:
+    def __init__(self):
+        self.output = None
+        self.stdout = None
+
+    def __call__(self, cmdline):
+        self.stdout = self.output
+        self.output = None
+        return self
+
+
+class ShellReal:
+    def __init__(self):
+        self.output = None
+
+    def __call__(self, cmdline):
+        cmdline = cmdline.split()
+        process = run(cmdline, stdout=PIPE, encoding='utf-8')
+
+        if self.output:
+            assert process.stdout == self.output
+            self.output = None
+
+        return process
