@@ -1,4 +1,5 @@
 import logging
+import sys
 from functools import partial
 from pathlib import Path
 from sys import exit
@@ -20,7 +21,7 @@ from website.utils.blog import (
     add_article, delete_article, rename_article, update_article)
 from website.utils.demo import setup_demo
 from website.utils.documents import (
-    insert_documents, delete_documents, rename_documents, update_documents)
+    delete_documents, insert_documents, rename_documents, update_documents)
 from website.utils.git import get_diff, print_diff
 
 here = Path(__file__).parent
@@ -122,29 +123,29 @@ def update(ctx, db, repository, commit='HEAD~1', force=False):
     config = DevelopmentConfig(DATABASE_PATH=db)
     app = create_app(config)
 
-    runner = partial(ctx.run, hide='stdout')
+    shell = partial(ctx.run, hide='stdout')
     with ctx.cd(repository):
-        new, modified, renamed, deleted = get_diff(runner, commit)
+        diff = get_diff(shell, commit)
 
-    print_diff(new, modified, renamed, deleted)
+    print_diff(sys.stdout, diff)
 
     if not force:
         confirm()
 
-    reader = AsciidoctorToHTMLConverter(runner)
-    try:
-        with app.app_context():
-            insert_documents(new, INSERT_CALLBACKS, reader)
+    reader = AsciidoctorToHTMLConverter(shell)
+    added, modified, renamed, deleted = diff
+
+    with app.app_context():
+        try:
+            insert_documents(added, INSERT_CALLBACKS, reader)
             update_documents(modified, UPDATE_CALLBACKS, reader)
             rename_documents(renamed, RENAME_CALLBACKS, reader)
             delete_documents(deleted, DELETE_CALLBACKS)
             _db.session.commit()
 
-    except Exception:
-        with app.app_context():
+        except Exception:
             _db.session.rollback()
-
-        exit("No change has been made to the database")
+            exit("No change has been made to the database")
 
 
 # Deployment

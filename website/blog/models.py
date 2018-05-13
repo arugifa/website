@@ -1,6 +1,5 @@
 from website import db
-
-from website.models import BaseModel, Document
+from website.models import BaseArticle, BaseModel
 
 
 tags = db.Table(
@@ -21,7 +20,7 @@ class Category(BaseModel):
     uri = db.Column(db.String, unique=True, nullable=False)
 
 
-class Article(Document):
+class Article(BaseArticle):
     __tablename__ = 'articles'
 
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'))

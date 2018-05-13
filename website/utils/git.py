@@ -39,21 +39,21 @@ def get_diff(run, from_commit, to_commit='HEAD'):
 
 
 def print_diff(stream, diff):
-    new, modified, renamed, deleted = diff
+    added, modified, renamed, deleted = diff
 
     def print_files(action, files):
         if files:
-            print(f'The following files will be {action}:', file=stream)
+            print(f'The following files have been {action}:', file=stream)
 
             for f in files:
-                if isinstance(f, list):
+                if isinstance(f, tuple):
                     # - src_file -> dst_file
                     print('- ', end='', file=stream)
                     print(*f, sep=' -> ', file=stream)
                 else:
                     print(f'- {f}', file=stream)
 
-    print_files('imported', new)
-    print_files('updated', modified)
+    print_files('added', added)
+    print_files('modified', modified)
     print_files('renamed', renamed)
-    print_files('removed', deleted)
+    print_files('deleted', deleted)

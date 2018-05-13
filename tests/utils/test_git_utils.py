@@ -1,3 +1,4 @@
+from io import StringIO
 from textwrap import dedent
 
 import pytest
@@ -102,3 +103,30 @@ class TestGetDiff():
             [],
         )
         assert actual == expected
+
+
+def test_print_diff():
+    diff = (
+        ['added_1', 'added_2'],
+        ['modified_1', 'modified_2'],
+        [('to_rename_1', 'renamed_1'), ('to_rename_2', 'renamed_2')],
+        ['deleted_1', 'deleted_2'],
+    )
+
+    stream = StringIO()
+    git_utils.print_diff(stream, diff)
+
+    assert stream.getvalue() == dedent("""\
+        The following files have been added:
+        - added_1
+        - added_2
+        The following files have been modified:
+        - modified_1
+        - modified_2
+        The following files have been renamed:
+        - to_rename_1 -> renamed_1
+        - to_rename_2 -> renamed_2
+        The following files have been deleted:
+        - deleted_1
+        - deleted_2
+    """)

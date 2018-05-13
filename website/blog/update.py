@@ -12,6 +12,8 @@ from .documents import retrieve_document_date, retrieve_document_uri
 from .models import Article, Category
 
 
+# Public API
+
 def add_article(path, src, prompt=input):
     uri = retrieve_document_uri(path)
     date = retrieve_document_date(path)
@@ -71,6 +73,8 @@ def delete_article(path):
     article = Article.find(uri=uri)
     db.session.delete(article)
 
+
+# Helpers
 
 def insert_category(uri, ask=input):
     category = Category.find(uri=uri)

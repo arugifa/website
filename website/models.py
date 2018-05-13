@@ -1,5 +1,5 @@
-from datetime import date
 from collections.abc import Iterable
+from datetime import date
 
 import sqlalchemy
 
@@ -46,7 +46,7 @@ class BaseModel(db.Model):
         db.session.add(self)
 
 
-class Document(BaseModel):
+class BaseArticle(BaseModel):
     __abstract__ = True
 
     id = db.Column(db.Integer, primary_key=True)

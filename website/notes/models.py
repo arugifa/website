@@ -1,6 +1,5 @@
 from website import db
-
-from website.models import Document
+from website.models import BaseArticle
 
 
 tags = db.Table(
@@ -10,7 +9,7 @@ tags = db.Table(
 )
 
 
-class Note(Document):
+class Note(BaseArticle):
     __tablename__ = 'notes'
 
     tags = db.relationship('Tag', secondary=tags, backref='notes')
