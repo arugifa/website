@@ -1,3 +1,4 @@
+import shlex
 from subprocess import PIPE, Popen, run
 
 
@@ -46,8 +47,8 @@ class ShellReal:
         self.output = None
 
     def __call__(self, cmdline):
-        cmdline = cmdline.split()
-        process = run(cmdline, stdout=PIPE, encoding='utf-8')
+        cmdline = shlex.split(cmdline)
+        process = run(cmdline, check=True, stdout=PIPE, encoding='utf-8')
 
         if self.output:
             assert process.stdout == self.output

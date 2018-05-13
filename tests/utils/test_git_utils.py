@@ -6,10 +6,9 @@ from website.utils import git
 
 
 class TestGetDiff():
-    @pytest.fixture(scope='class')
-    def repository(self, shell, tmpdir_factory):
-        tmpdir = tmpdir_factory.mktemp('test_get_diff')
-
+    @pytest.fixture
+    def repository(self, monkeypatch, shell, tmpdir):
+        monkeypatch.chdir(tmpdir)
         shell(f'git init {tmpdir}')
         tmpdir.ensure('init.txt')
 
@@ -30,7 +29,7 @@ class TestGetDiff():
 
         # Proceed to some changes.
         deleted.remove()
-        renamed.rename('renamed.txt')
+        renamed.rename(tmpdir.join('renamed.txt'))
         modified.write('modified')
         tmpdir.ensure('added.txt')
 
@@ -44,50 +43,50 @@ class TestGetDiff():
 
     def test_get_diff_using_head(self, repository, shell):
         shell.output = dedent("""\
-            A       added
-            D       deleted
-            M       modified
-            A       new
-            R100    to_rename       renamed
+            A\tadded.txt
+            D\tdeleted.txt
+            M\tmodified.txt
+            A\tnew.txt
+            R100\tto_rename.txt\trenamed.txt
         """)
 
         actual = git.get_diff(shell, 'HEAD~2')
         expected = (
             ['added.txt', 'new.txt'],
             ['modified.txt'],
-            ['renamed.txt'],
+            [('to_rename.txt', 'renamed.txt')],
             ['deleted.txt'],
         )
         assert actual == expected
 
     def test_get_diff_between_two_commits(self, repository, shell):
         shell.output = dedent("""\
-            A       added
-            D       deleted
-            M       modified
-            R100    to_rename       renamed
+            A\tadded.txt
+            D\tdeleted.txt
+            M\tmodified.txt
+            R100\tto_rename.txt\trenamed.txt
         """)
 
         actual = git.get_diff(shell, 'HEAD~2', 'HEAD~1')
         expected = (
             ['added.txt'],
             ['modified.txt'],
-            ['renamed.txt'],
+            [('to_rename.txt', 'renamed.txt')],
             ['deleted.txt'],
         )
         assert actual == expected
 
     def test_get_partial_diff(self, repository, shell):
         shell.output = dedent("""\
-            A       added
-            A       modified
-            A       new
-            A       renamed
+            A\tadded.txt
+            A\tmodified.txt
+            A\tnew.txt
+            A\trenamed.txt
         """)
 
         actual = git.get_diff(shell, 'HEAD~3')
         expected = (
-            ['added.txt', 'deleted.txt', 'modified.txt', 'renamed.txt'],
+            ['added.txt', 'modified.txt', 'new.txt', 'renamed.txt'],
             [],
             [],
             [],

@@ -1,14 +1,17 @@
-import sys
 from collections import defaultdict
-from pathlib import PurePath
 
 
 def get_diff(run, from_commit, to_commit='HEAD'):
     """Return diff between two commits.
 
-    :param function run: callback for running ``git diff``.
-    :param str from_commit: commit to compare to.
-    :param str to_commit: reference commit.
+    :param function run:
+        callback for running ``git diff``.
+        Must return an object with a ``stdout`` attribute,
+        similar to :fun:`subprocess.run'.
+    :param str from_commit:
+        commit to compare to.
+    :param str to_commit:
+        reference commit.
     """
     diff = defaultdict(list)
 
@@ -18,13 +21,12 @@ def get_diff(run, from_commit, to_commit='HEAD'):
 
     for line in output:
         status, *files = line.split('\t')
-        files = [PurePath(f) for f in files]
 
         # We only check the first letter of the status,
         # because when a file is renamed, the status is
         # followed by a score of similarity.
         if status[0] == 'R':
-            diff['R'].append(files)
+            diff['R'].append(tuple(files))
         else:
             diff[status[0]].append(files[0])
 
@@ -36,7 +38,9 @@ def get_diff(run, from_commit, to_commit='HEAD'):
     )
 
 
-def print_diff(new, modified, renamed, deleted, stream=sys.stdout):
+def print_diff(stream, diff):
+    new, modified, renamed, deleted = diff
+
     def print_files(action, files):
         if files:
             print(f'The following files will be {action}:', file=stream)

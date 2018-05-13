@@ -1,4 +1,5 @@
 import pytest
+pytest.register_assert_rewrite('website.test.integration')
 import webtest
 from rackspace.connection import Connection
 

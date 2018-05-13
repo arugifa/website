@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 setup(
     name='arugifa-website',
@@ -23,6 +23,7 @@ setup(
         'invoke>=0.22',
         # Rackspace SDK is not compatible with Openstack SDK 0.10
         'openstacksdk>=0.9,<0.10',
+        'os-client-config<1.31',
         'rackspacesdk>=0.7',
     ],
 )
