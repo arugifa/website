@@ -31,7 +31,7 @@ class InvokeStub:
         return run(cmdline, stdout=PIPE, universal_newlines=True)
 
 
-class ShellStub:
+class RunStub:
     def __init__(self):
         self.output = None
         self.stdout = None
@@ -42,7 +42,7 @@ class ShellStub:
         return self
 
 
-class ShellReal:
+class RunReal:
     def __init__(self):
         self.output = None
 

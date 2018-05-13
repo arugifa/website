@@ -1,3 +1,6 @@
+import shlex
+from subprocess import PIPE, run
+
 import pytest
 pytest.register_assert_rewrite('website.test.integration')
 import webtest
@@ -9,7 +12,7 @@ from website.cloud.helpers import retrieve_test_containers
 from website.cloud.stubs import ConnectionStub
 from website.config import TestingConfig
 from website.test.integration import (
-    CommandLine, InvokeStub, ShellReal, ShellStub)
+    CommandLine, InvokeStub, RunReal, RunStub)
 from website.test.pytest import FixtureMarker
 
 integration_test = FixtureMarker()
@@ -117,7 +120,17 @@ def invoke_ctx():
     return InvokeStub()
 
 
-@pytest.fixture(params=[ShellStub, ShellReal])
+@pytest.fixture(params=[RunStub, RunReal])
 @integration_test
-def shell(request):
+def git(request):
     return request.param()
+
+
+@pytest.fixture(scope='session')
+@integration_test
+def shell():
+    def runner(cmdline):
+        cmdline = shlex.split(cmdline)
+        return run(cmdline, check=True, stdout=PIPE, encoding='utf-8')
+
+    return runner
