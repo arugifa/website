@@ -1,7 +1,9 @@
 from collections import defaultdict
+from functools import partial
+from subprocess import PIPE, run
 
 
-def get_diff(run, from_commit, to_commit='HEAD'):
+def get_diff(from_commit, to_commit='HEAD', shell=None):
     """Return diff between two commits.
 
     :param function run:
@@ -13,11 +15,13 @@ def get_diff(run, from_commit, to_commit='HEAD'):
     :param str to_commit:
         reference commit.
     """
-    diff = defaultdict(list)
+    shell = shell or partial(run, check=True, stdout=PIPE, encoding='utf-8')
 
     cmdline = f'git diff --name-status {from_commit} {to_commit}'
     # Discard last new line character.
-    output = run(cmdline).stdout.split('\n')[:-1]
+    output = shell(cmdline).stdout.split('\n')[:-1]
+
+    diff = defaultdict(list)
 
     for line in output:
         status, *files = line.split('\t')

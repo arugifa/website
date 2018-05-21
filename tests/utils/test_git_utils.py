@@ -56,7 +56,7 @@ class TestGetDiff():
         """)
 
         monkeypatch.chdir(repository)
-        actual = git_utils.get_diff(git, 'HEAD~2')
+        actual = git_utils.get_diff('HEAD~2', shell=git)
 
         expected = (
             ['added.txt', 'new.txt'],
@@ -75,7 +75,7 @@ class TestGetDiff():
         """)
 
         monkeypatch.chdir(repository)
-        actual = git_utils.get_diff(git, 'HEAD~2', 'HEAD~1')
+        actual = git_utils.get_diff('HEAD~2', 'HEAD~1', shell=git)
 
         expected = (
             ['added.txt'],
@@ -94,7 +94,7 @@ class TestGetDiff():
         """)
 
         monkeypatch.chdir(repository)
-        actual = git_utils.get_diff(git, 'HEAD~3')
+        actual = git_utils.get_diff('HEAD~3', shell=git)
 
         expected = (
             ['added.txt', 'modified.txt', 'new.txt', 'renamed.txt'],

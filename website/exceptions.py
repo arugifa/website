@@ -2,11 +2,17 @@ class WebsiteException(Exception):
     pass
 
 
-# Database Related Exceptions
+# Database Exceptions
 
 class DatabaseException(WebsiteException):
     pass
 
 
-class MultipleResultsFound(WebsiteException):
+class MultipleResultsFound(DatabaseException):
+    pass
+
+
+# Content Exceptions
+
+class UpdateContentException(WebsiteException):
     pass
