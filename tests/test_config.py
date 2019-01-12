@@ -8,13 +8,6 @@ from website import config
 class BaseTestConfig:
     config_class = None
 
-    def test_can_define_new_settings_at_runtime(self):
-        config = self.config_class(
-            SOME_SETTING='some_setting', OTHER_SETTING='other_setting')
-
-        assert config.SOME_SETTING == 'some_setting'
-        assert config.OTHER_SETTING == 'other_setting'
-
     def test_can_overwritte_default_settings(self, monkeypatch):
         monkeypatch.setattr(
             self.config_class,
@@ -25,6 +18,13 @@ class BaseTestConfig:
 
         config = self.config_class(DEFAULT_SETTING='new_value')
         assert config.DEFAULT_SETTING == 'new_value'
+
+    def test_can_define_new_settings_at_runtime(self):
+        config = self.config_class(
+            SOME_SETTING='some_setting', OTHER_SETTING='other_setting')
+
+        assert config.SOME_SETTING == 'some_setting'
+        assert config.OTHER_SETTING == 'other_setting'
 
 
 class TestDefaultConfig(BaseTestConfig):
@@ -38,7 +38,9 @@ class TestDevelopmentConfig(BaseTestConfig):
     def db_path(self, tmpdir):
         return PurePath(tmpdir.ensure('test.db'))
 
-    def test_can_set_database_via_environment_variable(
+    # Database Path
+
+    def test_can_set_database_path_with_an_environment_variable(
             self, db_path, monkeypatch):
         monkeypatch.setenv('WEBSITE_DB', db_path)
         config = self.config_class()
