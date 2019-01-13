@@ -1,4 +1,3 @@
-from datetime import date
 import re
 
 import pytest
@@ -8,14 +7,18 @@ from website.exceptions import MultipleResultsFound
 
 @pytest.mark.usefixtures('db')
 class BaseTestModel:
+    """Base class for all model tests."""
+
     #: Model factory.
     factory = None
     #: Model class.
     model = None
     #: List of optional model's fields, if any.
     optional_fields = None
-    #: Model's column which can be filtered (string type).
+    #: Any model's column, of string type, which can be filtered.
     filterable_column = None
+
+    # General
 
     def test_table_name_is_model_name_in_plural(self):
         model_name = self.model.__name__
@@ -61,16 +64,3 @@ class BaseTestModel:
 
         with pytest.raises(MultipleResultsFound):
             self.model.find(**{self.filterable_column: 'something'})
-
-
-class BaseTestDocumentModel(BaseTestModel):
-    optional_fields = ['last_update', 'publication_date']
-    filterable_column = 'title'
-
-    def test_default_publication_date(self):
-        document = self.factory(publication_date=None)
-        assert document.publication_date == date.today()
-
-
-class BaseTestRecommendedModel(BaseTestModel):
-    filterable_column = 'title'

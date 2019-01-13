@@ -25,6 +25,7 @@ class DevelopmentConfig(DefaultConfig):
 
     :param SQLALCHEMY_DATABASE_URI: connection string for SQLAlchemy.
     """
+
     #: Forward errors to web clients, and auto-reload source code.
     DEBUG = True
 

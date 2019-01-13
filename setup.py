@@ -15,7 +15,7 @@ setup(
     ],
     packages=find_packages(),
     install_requires=[
-        'beautifulsoup4',
+        'beautifulsoup4>=4.7',
         'factory_boy>=2.9',
         'flask>=0.12',
         'flask-sqlalchemy>=2.3',

@@ -1,5 +1,5 @@
 from collections.abc import Iterable
-from datetime import date
+from typing import List
 
 import sqlalchemy
 
@@ -8,14 +8,21 @@ from website.exceptions import MultipleResultsFound
 
 
 class BaseModel(db.Model):
+    """Base class to be inherited by all other models."""
+
     __abstract__ = True
 
     @classmethod
-    def all(cls):
+    def all(cls) -> List:
+        """Return all items."""
         return cls.query.all()
 
     @classmethod
-    def filter(cls, **kwargs):
+    def filter(cls, **kwargs) -> List:
+        """Filter items.
+
+        Search parameters can be given as keyword arguments.
+        """
         query = cls.query
 
         for key, value in kwargs:
@@ -28,14 +35,17 @@ class BaseModel(db.Model):
 
         return query.all()
 
+    # TODO: How to use typing annotations here? (01/2019)
+    # Doing like that: `def find(cls, **kwargs) -> BaseModel:`
+    # raises a "F821 undefined name" error.
     @classmethod
     def find(cls, **kwargs):
-        """Search for a unique article.
+        """Look for a specific item.
 
         Search parameters should be given as keyword arguments.
 
-        :rtype: a :class:`.Article` instance if found; ``None`` otherwise.
-        :raise: :class:`.MultipleResultsFound` if several articles are found.
+        :raise website.exceptions.MultipleResultsFound:
+            if several articles are found.
         """
         try:
             return cls.query.filter_by(**kwargs).one_or_none()
@@ -43,25 +53,5 @@ class BaseModel(db.Model):
             raise MultipleResultsFound
 
     def save(self):
+        """Save the item into database."""
         db.session.add(self)
-
-
-class BaseArticle(BaseModel):
-    __abstract__ = True
-
-    id = db.Column(db.Integer, primary_key=True)
-
-    title = db.Column(db.String, nullable=False)
-    content = db.Column(db.Text, nullable=False)
-    publication_date = db.Column(db.Date, default=date.today, nullable=False)
-    last_update = db.Column(db.Date)
-    uri = db.Column(db.String, unique=True, nullable=False)
-
-
-class Tag(BaseModel):
-    __tablename__ = 'tags'
-
-    id = db.Column(db.Integer, primary_key=True)
-
-    name = db.Column(db.String, nullable=False)
-    uri = db.Column(db.String, unique=True, nullable=False)

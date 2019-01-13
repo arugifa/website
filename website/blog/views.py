@@ -1,17 +1,19 @@
 from flask import abort, render_template
 
-from . import blog
-from .models import Article
+from website.blog import blog
+from website.blog.models import Article
 
 
 @blog.route('/')
 def home():
-    articles = Article.latest()
+    """Blog home page."""
+    articles = Article.latest_ones()
     return render_template('blog.html', articles=articles)
 
 
 @blog.route('/articles/<uri>.html')
 def article(uri):
+    """Blog article page."""
     article = Article.find(uri=uri)
 
     if article is None:

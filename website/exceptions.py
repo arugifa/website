@@ -1,5 +1,5 @@
 class WebsiteException(Exception):
-    """Base exception for all other exceptions."""
+    """Base exception for all project's exceptions."""
 
 
 # Database Exceptions

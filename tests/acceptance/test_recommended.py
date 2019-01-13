@@ -1,5 +1,5 @@
 import pytest
-from pytest_bdd import given, then, scenario, when
+from pytest_bdd import given, scenario, then, when
 from pytest_bdd.parsers import parse
 
 from website.factories import RecommendedArticleFactory
@@ -7,7 +7,7 @@ from website.factories import RecommendedArticleFactory
 
 # Scenarios
 
-@pytest.mark.skip(reason="Feature not yet fully implemented")
+@pytest.mark.skip(reason="Feature not yet implemented")
 @scenario('features/recommended.feature', "Navigate to recommended material")
 def test_navigate_to_recommended_reading():
     pass

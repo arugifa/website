@@ -1,14 +1,14 @@
 from datetime import date, timedelta
+from typing import List
 
-from .factories import ArticleFactory
+from website.blog.factories import ArticleFactory
+from website.blog.models import Article
 
 
-def create_articles(count):
+def create_articles(count: int) -> List[Article]:
     """Create blog articles, with different publication dates.
 
     Articles are sorted by publication date, in ascending order.
-
-    :param int count: number of articles to create.
     """
     today = date.today()
     return [

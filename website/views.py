@@ -1,14 +1,15 @@
 from flask import render_template
 
-from . import website
-
-
-@website.app_errorhandler(404)
-def page_not_found(error):
-    return render_template('404.html'), 404
+from website import website
 
 
 @website.route('/404error.html')
-def page_not_found_on_rackspace():
-    """404 page needed to host a static website on RackSpace."""
+def page_not_found_on_rackspace():  # noqa: D401
+    """Generic HTTP 404 Not Found error page.
+
+    We define a specific view instead of using :meth:`website.app_errorhandler`
+    to handle 404 errors. The reason is simple: when uploading the website to
+    the Cloud (as a set of static files), Rackspace expects a file named
+    ``404error.html`` to exist.
+    """
     return render_template('404.html'), 404

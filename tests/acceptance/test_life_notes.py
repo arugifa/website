@@ -1,5 +1,5 @@
 import pytest
-from pytest_bdd import given, then, scenario, when
+from pytest_bdd import given, scenario, then, when
 from pytest_bdd.parsers import parse
 
 from website.factories import LifeNoteFactory
@@ -7,7 +7,7 @@ from website.factories import LifeNoteFactory
 
 # Scenarios
 
-@pytest.mark.skip(reason="Feature not yet fully implemented")
+@pytest.mark.skip(reason="Feature not yet implemented")
 @scenario('features/life_notes.feature', "Navigate to life notes")
 def test_navigate_to_life_notes():
     pass
