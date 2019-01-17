@@ -1,153 +1,240 @@
+"""Main entry point to manage content of my website."""
+
 import logging
+from abc import ABC, abstractmethod
 from datetime import date
-from pathlib import PurePath
+from pathlib import Path
+from typing import Callable, Iterable, List
+
+from flask_sqlalchemy import SQLAlchemy
 
 from website import db
+from website.blog.contenthandlers import ArticleHandler
 from website.exceptions import UpdateContentException
+from website.models import Document
 
 logger = logging.getLogger(__name__)
 
 
-# Public API
+class ContentManager:
+    """Manage content life cycle.
 
-def insert_documents(paths, callbacks, reader=open, prompt=input):
-    """Add documents into the database."""
-    for path in paths:
-        callback = _get_callback('insert', path, callbacks)
-        content = _read(path, reader)
-        document = _do('insert', callback, path, content, prompt)
-        db.session.add(document)
+    Content of the website is stored inside a Git repository, in order to have
+    content versionning. The structure of this repository should look like::
 
+        blog/
+            2019/
+                01-31. first_article_of_the_year.adoc
+                12-31. last_article_of_the_year.adoc
 
-def delete_documents(paths, callbacks):
-    """Delete documents from the database."""
-    for path in paths:
-        callback = _get_callback('delete', path, callbacks)
-        _do('delete', callback, path)
+    Documents in this repository are loaded, processed, and finally stored,
+    updated or deleted inside the database.
 
+    :param repository:
+        Git repository's path.
+    :param reader:
+        function to read documents in the repository.
+    :param prompt:
+        function to interactively ask questions during documents import,
+        when certain things cannot be completely done automatically.
+    """
 
-def rename_documents(paths, callbacks, reader=open, prompt=input):
-    """Rename documents inside the database."""
-    for src, dst in paths:
+    HANDLERS = {
+        'blog': ArticleHandler,
+    }
+
+    def __init__(
+            self, repository: Path,
+            reader: Callable = open, prompt: Callable = input):
+        self.repository = repository
+        self.reader = reader
+        self.prompt = prompt
+        #: Specialized content management helpers (e.g., blog, notes, etc.).
+        self.handlers = {
+            category: handler(db, reader, prompt)
+            for category, handler in self.HANDLERS.items()}
+
+    def add(self, paths: Iterable[Path]) -> List[Document]:
+        """Insert documents into database.
+
+        :param paths: document paths.
+        """
+        documents = []
+
+        for path in paths:
+            path = path.relative_to(self.repository)
+            handler = self.get_handler(path)
+            document = handler.add(path)
+            documents.add(document)
+
+        return documents
+
+    def delete(self, paths: Iterable[Path]) -> None:
+        """Delete documents from database.
+
+        :param paths: document paths.
+        """
+        for path in paths:
+            path = path.relative_to(self.repository)
+            handler = self.get_handler(path)
+            handler.delete(path)
+
+    def rename(self, paths: Iterable[Path]) -> List[Document]:
+        """Rename documents in database.
+
+        :param paths: document paths.
+        """
+        documents = []
+
+        for src, dst in paths:
+            try:
+                assert src.parent == dst.parent
+            except AssertionError:
+                print(
+                    f"Cannot move {src.name} from {src.parent} to {dst.parent}: "  # noqa: E501
+                    "it should stay in the same top-level directory")
+                raise
+
+            src = src.relative_to(self.repository)
+            dst = dst.relative_to(self.repository)
+            handler = self.get_handler(src)
+            document = handler.rename(src, dst)
+            documents.add(document)
+
+        return documents
+
+    def update(self, paths: Iterable[Path]) -> List[Document]:
+        """Update documents in database.
+
+        :param paths: document paths.
+        """
+        documents = []
+
+        for path in paths:
+            path = path.relative_to(self.repository)
+            handler = self.get_handler(path)
+            document = handler.update(path)
+            documents.add(document)
+
+        return documents
+
+    # Helpers
+
+    @staticmethod
+    def get_category(path: Path):
+        """Return the type of a document, based on its path.
+
+        :param path:
+            document's path, relative to its Git repository, e.g.:
+
+            - <CATEGORY>/<URI>.<EXTENSION>
+            - <CATEGORY>/<YEAR>/<MONTH>-<DAY>.<URI>.<EXTENSION>
+
+        :raise ValueError:
+            if the document is stored in the top-level directory,
+            in which case, it's not possible to guess its category.
+        """
         try:
-            assert src.parent == dst.parent
-        except AssertionError:
-            print(
-                f"Cannot move {src.name} from {src.parent} to {dst.parent}: "
-                "it should stay in the same top-level directory")
-            raise
+            return list(path.parents)[-2].name
+        except IndexError:
+            error = 'Document "%s" must be classified in a directory'
+            logger.exception(error, path)
+            raise ValueError(error % path)
 
-        callback = _get_callback('rename', src, callbacks)
-        content = _read(dst, reader)
-        _do('rename', callback, dst, content, prompt)
+    def get_handler(self, path: Path) -> 'DocumentHandler':
+        """Return handler to process a document.
+
+        :param path:
+            document's path, relative to its Git repository
+            (e.g., ``<CATEGORY>/<URI>.<EXTENSION>``).
+        :raise KeyError:
+            when no handler is found.
+        :raise ValueError:
+            if unable to guess document's category type from its path.
+        """
+        try:
+            category = self.get_category(path)  # ValueError
+            return self.handlers[category]  # KeyError
+        except (KeyError, ValueError):
+            error = "No callback defined for %s"
+            logger.error(error, path)
+            raise KeyError(error % path)
 
 
-def update_documents(paths, callbacks, reader=open, prompt=input):
-    """Update documents inside the database."""
-    for path in paths:
-        callback = _get_callback('update', path, callbacks)
-        content = _read(path, reader)
-        _do('update', callback, path, content, prompt)
+class DocumentHandler(ABC):
+    """Manage documents life cycle.
 
+    Load document sources from local files, and update their state in database.
 
-# Helpers
-
-def get_document_callback(path, callbacks):
-    """Return callback function to process a document.
-
-    :param pathlib.Path path: document's path, relative to its repository.
-    :raise KeyError: when no callback is found.
-    :raise ValueError: if unable to get document's category type from its path.
+    :param db:
+        website's database.
+    :param reader:
+        function to read documents in the repository.
+    :param prompt:
+        function to interactively ask questions during documents import,
+        when certain things cannot be completely done automatically.
     """
-    # Document's path:
-    # <TYPE>/<URI>.<EXTENSION>
-    # <TYPE>/<YEAR>/<MONTH>-<DAY>.<URI>.<EXTENSION>
-    try:
-        category = get_document_category(path)  # ValueError
-        return callbacks[category]  # KeyError
-    except (KeyError, ValueError):
-        error = "No callback defined for %s"
-        logger.error(error, path)
-        raise KeyError(error % path)
 
+    def __init__(
+            self, db: SQLAlchemy,
+            reader: Callable = open, prompt: Callable = input):
+        self.db = db
+        self.reader = reader
+        self.prompt = prompt
 
-def get_document_category(path):
-    """Return a document's type, based on the document's path.
+    @abstractmethod
+    def add(self, path: Path) -> Document:
+        """Insert a document into database."""
 
-    :param pathlib.Path path: document's path, relative to its repository.
-    :raise ValueError: if document is not stored in a directory.
-    """
-    # Document's path:
-    # <TYPE>/<URI>.<EXTENSION>
-    # <TYPE>/<YEAR>/<MONTH>-<DAY>.<URI>.<EXTENSION>
-    path = PurePath(path)
+    @abstractmethod
+    def delete(self, path: Path) -> None:
+        """Remove a document from database."""
 
-    try:
-        return list(path.parents)[-2].name
-    except IndexError:
-        error = 'Document "%s" must be classified in a directory'
-        logger.exception(error, path)
-        raise ValueError(error % path)
+    @abstractmethod
+    def rename(self, path) -> Document:
+        """Rename a document in database."""
 
+    @abstractmethod
+    def update(self, path) -> Document:
+        """Update a document in database."""
 
-def get_document_date(path):
-    """Return a document's date, based on the document's path.
+    # Helpers
 
-    :param pathlib.Path path: document's path, relative to its repository.
-    :raise ValueError: if document's path doesn't contain a proper date.
-    """
-    # Document's path:
-    # <YEAR>/<MONTH>-<DAY>.<URI>.<EXTENSION>
-    path = PurePath(path)
+    @staticmethod
+    def parse_date(path: Path) -> date:
+        """Return the creation date of a document, based on its path.
 
-    try:
-        year = int(path.parents[0].name)
-        month, day = map(int, path.name.split('.')[0].split('-'))
-    except (IndexError, TypeError, ValueError):
-        error = 'Path "%s" does not contain a proper date'
-        logger.error(error, path)
-        raise ValueError(error % path)
+        :param path:
+            document's path (e.g., ``<YEAR>/<MONTH>-<DAY>.<URI>.<EXTENSION>``).
+        :raise ValueError:
+            if the  document's path doesn't contain a proper date.
+        """
+        try:
+            year = int(path.parents[0].name)
+            month, day = map(int, path.name.split('.')[0].split('-'))
+        except (IndexError, TypeError, ValueError):
+            error = 'Path "%s" does not contain a proper date'
+            logger.error(error, path)
+            raise ValueError(error % path)
 
-    return date(year, month, day)
+        return date(year, month, day)
 
+    @staticmethod
+    def parse_uri(path: Path) -> str:
+        """Return the URI of a document, based on its path.
 
-def get_document_uri(path):
-    """Return a document's URI, based on the document's path.
+        :param path: document's path (e.g., ``<URI>.<EXTENSION>``).
+        """
+        return path.stem.split('.')[-1]
 
-    :param path: document's path, relative to its repository.
-    :type path: Path
-    """
-    # Document's name:
-    # <URI>.<EXTENSION>
-    # <MONTH>-<DAY>.<URI>.<EXTENSION>
-    path = PurePath(path)
-    return path.stem.split('.')[-1]
+    def read(self, path: Path) -> str:
+        """Read document's source file.
 
-
-# Private API
-
-def _get_callback(action, path, callbacks):
-    try:
-        return get_document_callback(path, callbacks)
-    except (KeyError, ValueError):
-        error = f"Cannot find callback for %s"
-        logger.error(error, path)
-        raise UpdateContentException(error % path)
-
-
-def _read(path, reader):
-    try:
-        return reader(path).read()
-    except (OSError, UnicodeDecodeError) as exc:
-        error = "Unable to read %s: %s"
-        logger.error(error, path, exc)
-        raise UpdateContentException(error % (path, exc))
-
-
-def _do(action, callback, path, *args):
-    try:
-        return callback(path, *args)
-    except Exception as exc:
-        error = f"Failed to {action} %s: %s"
-        logger.error(error, path, exc)
-        raise UpdateContentException(error % (path, exc))
+        :param path: document's path.
+        """
+        try:
+            return self.reader(path).read()
+        except (OSError, UnicodeDecodeError) as exc:
+            error = "Unable to read %s: %s"
+            logger.error(error, path, exc)
+            raise UpdateContentException(error % (path, exc))

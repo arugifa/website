@@ -1,13 +1,15 @@
+"""Blog models."""
+
 from datetime import date
 from typing import Generator
 
 from website import db
-from website.models import BaseModel
+from website.models import BaseModel, Document
 
 
 # Models
 
-class Article(BaseModel):
+class Article(Document):
     """Blog article."""
 
     # TODO: Use declared attribute for table names, in the base class (01/2019)
@@ -32,9 +34,8 @@ class Article(BaseModel):
     category = db.Relationship('Category', back_populates='articles')
     tags = db.relationship('Tag', secondary='tags', back_populates='articles')
 
-    # TODO: How to use generator typing annotation here? (01/2019)
     @classmethod
-    def latest_ones(cls) -> Generator:
+    def latest_ones(cls) -> Generator['Article']:
         """Return articles ordered by publication date, in descending order.
 
         More precisely, articles are sorted by:

@@ -1,3 +1,5 @@
+"""Everything related to my blog."""
+
 from flask import Blueprint
 
 blog = Blueprint('blog', __name__, template_folder='templates')

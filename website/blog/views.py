@@ -1,3 +1,5 @@
+"""Web pages of my blog."""
+
 from flask import abort, render_template
 
 from website.blog import blog

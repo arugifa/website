@@ -1,3 +1,5 @@
+"""Factories to create blog articles during testing."""
+
 from datetime import date
 
 from factory import LazyFunction, List, Sequence, SubFactory

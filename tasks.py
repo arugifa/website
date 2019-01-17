@@ -1,3 +1,5 @@
+"""Command-line utilities to manage my website updates and deployment."""
+
 import logging
 import sys
 from functools import partial
@@ -10,19 +12,15 @@ from openstack.exceptions import SDKException
 from rackspace.connection import Connection
 
 from website import create_app, db as _db
-from website.blog.models import Article
 from website.cloud.stubs import ConnectionStub
 from website.cloud.utils import (
     connect_to_the_cloud, delete_outdated_files, retrieve_container,
     retrieve_objects, upload_existing_files, upload_new_files)
 from website.config import DevelopmentConfig
+from website.content import ContentManager
+from website.utils import git
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
-from website.utils.blog import (
-    add_article, delete_article, rename_article, update_article)
 from website.utils.demo import setup_demo
-from website.utils.documents import (
-    delete_documents, insert_documents, rename_documents, update_documents)
-from website.utils.git import get_diff, print_diff
 
 here = Path(__file__).parent
 
@@ -31,22 +29,6 @@ CSS_FILE = SOURCE_CODE / 'static/stylesheet.css'
 FLASK_APP = here / 'manage.py'
 FROZEN_WEBSITE = here / 'frozen'
 SASS_FILE = SOURCE_CODE / 'stylesheets/main.scss'
-MODELS = {
-    'blog': Article,
-}
-INSERT_CALLBACKS = {
-    'blog': add_article,
-}
-UPDATE_CALLBACKS = {
-    'blog', update_article,
-}
-RENAME_CALLBACKS = {
-    'blog', rename_article,
-}
-DELETE_CALLBACKS = {
-    'blog', delete_article,
-}
-
 
 logging.basicConfig(format='%(message)s', level=logging.INFO)
 
@@ -119,28 +101,31 @@ def create_db(ctx, path):
 
 @task
 def update(ctx, db, repository, commit='HEAD~1', force=False):
-    repository = Path(repository).resolve()
+    """Update website's content from a content repository."""
     config = DevelopmentConfig(DATABASE_PATH=db)
     app = create_app(config)
 
-    shell = partial(ctx.run, hide='stdout')
-    with ctx.cd(repository):
-        diff = get_diff(shell, commit)
+    repository = Path(repository).resolve()
+    invoke_shell = partial(ctx.run, hide='stdout')
 
-    print_diff(sys.stdout, diff)
+    # Get list of modified documents in the repository.
+    with ctx.cd(repository):
+        diff = git.diff(commit, shell=invoke_shell)
 
     if not force:
         confirm()
 
-    reader = AsciidoctorToHTMLConverter(shell)
-    added, modified, renamed, deleted = diff
+    # Update documents in database.
+    content_reader = AsciidoctorToHTMLConverter(invoke_shell)
+    content = ContentManager(repository, content_reader)
 
     with app.app_context():
         try:
-            insert_documents(added, INSERT_CALLBACKS, reader)
-            update_documents(modified, UPDATE_CALLBACKS, reader)
-            rename_documents(renamed, RENAME_CALLBACKS, reader)
-            delete_documents(deleted, DELETE_CALLBACKS)
+            content.add(diff['added'])
+            content.update(diff['modified'])
+            content.rename(diff['renamed'])
+            content.delete(diff['deleted'])
+
             _db.session.commit()
 
         except Exception:

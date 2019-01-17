@@ -1,5 +1,7 @@
+"""Base classes to be inherited from by models all over the website."""
+
 from collections.abc import Iterable
-from typing import List
+from typing import List, Optional
 
 import sqlalchemy
 
@@ -12,13 +14,15 @@ class BaseModel(db.Model):
 
     __abstract__ = True
 
+    # Class Methods
+
     @classmethod
-    def all(cls) -> List:
+    def all(cls) -> List['BaseModel']:
         """Return all items."""
         return cls.query.all()
 
     @classmethod
-    def filter(cls, **kwargs) -> List:
+    def filter(cls, **kwargs: str) -> List['BaseModel']:
         """Filter items.
 
         Search parameters can be given as keyword arguments.
@@ -35,11 +39,8 @@ class BaseModel(db.Model):
 
         return query.all()
 
-    # TODO: How to use typing annotations here? (01/2019)
-    # Doing like that: `def find(cls, **kwargs) -> BaseModel:`
-    # raises a "F821 undefined name" error.
     @classmethod
-    def find(cls, **kwargs):
+    def find(cls, **kwargs: str) -> Optional['BaseModel']:
         """Look for a specific item.
 
         Search parameters should be given as keyword arguments.
@@ -52,6 +53,18 @@ class BaseModel(db.Model):
         except sqlalchemy.orm.exc.MultipleResultsFound:
             raise MultipleResultsFound
 
-    def save(self):
-        """Save the item into database."""
+    # Instance Methods
+
+    def delete(self) -> None:
+        """Remove item from database."""
+        db.session.delete(self)
+
+    def save(self) -> None:
+        """Save item into database."""
         db.session.add(self)
+
+
+class Document(BaseModel):
+    """Base class for all documents (.e.g., blog articles, notes, etc.)."""
+
+    __abstract__ = True

@@ -1,102 +1,152 @@
+"""Content management of my blog."""
+
 from datetime import date
+from pathlib import Path
+from typing import Iterable, List, Optional
 
 from bs4 import BeautifulSoup
 
-from website import db
-from website.models import Tag
-from website.utils.asciidoctor import (
-    look_for_category, look_for_content,
-    look_for_introduction, look_for_tags, look_for_title)
-
-from .documents import retrieve_document_date, retrieve_document_uri
-from .models import Article, Category
+from website.blogs.models import Article, Category, Tag
+from website.content import DocumentHandler
 
 
-# Public API
+class ArticleHandler(DocumentHandler):
+    """Manage articles life cycle."""
 
-def add_article(path, src, prompt=input):
-    uri = retrieve_document_uri(path)
-    date = retrieve_document_date(path)
+    def add(self, path: Path) -> Article:
+        """Insert an article into database."""
+        uri = self.parse_uri(path)
+        date = self.parse_date(path)
 
-    html = BeautifulSoup(src, 'html.parser')
-    title = look_for_title(html)
-    introduction = look_for_introduction(html)
-    content = look_for_content(html)
+        source = self.read(path)
+        html = BeautifulSoup(source, 'html.parser')
 
-    category_uri = look_for_category(html)
-    category = insert_category(category_uri, prompt)
+        title = self.parse_title(html)
+        introduction = self.parse_introduction(html)
+        content = self.parse_content(html)
 
-    tag_uris = look_for_tags(html)
-    tags = insert_tags(tag_uris, prompt)
+        category_uri = self.parse_category(html)
+        category = self.insert_category(category_uri)
 
-    return Article(
-        title=title, uri=uri,
-        category=category, tags=tags,
-        introduction=introduction, content=content,
-        publication_date=date)
+        tag_uris = self.parse_tags(html)
+        tags = self.insert_tags(tag_uris)
 
+        article = Article(
+            uri=uri, title=title,
+            introduction=introduction, content=content,
+            category=category, tags=tags,
+            publication_date=date,
+        )
+        article.save()
 
-def update_article(path, src, prompt=input):
-    uri = retrieve_document_uri(path)
-    article = Article.find(uri=uri)
+        return article
 
-    html = BeautifulSoup(src, 'html.parser')
-    article.title = look_for_title(html)
-    article.introduction = look_for_introduction(html)
-    article.content = look_for_content(html)
+    def delete(self, path: Path) -> None:
+        """Delete an article from database."""
+        uri = self.parse_uri(path)
+        article = Article.find(uri=uri)
+        article.delete()
 
-    category_uri = look_for_category(html)
-    article.category = insert_category(category_uri, prompt)
+    def rename(self, previous_path: Path, new_path: Path) -> Article:
+        """Rename an article in database."""
+        # TODO: Set an HTTP redirection (01/2019)
+        previous_uri = self.parse_uri(previous_path)
+        article = Article.find(uri=previous_uri)
 
-    tag_uris = look_for_tags(html)
-    article.tags = insert_tags(tag_uris, prompt)
+        new_uri = self.parse_uri(new_path)
+        article.uri = new_uri
 
-    article.last_update = date.today()
+        return self.update(new_path)
 
-    return article
+    def update(self, path: Path) -> Article:
+        """Update an article in database."""
+        uri = self.parse_uri(path)
+        article = Article.find(uri=uri)
 
+        source = self.read(path)
+        html = BeautifulSoup(source, 'html.parser')
 
-def rename_article(previous_path, new_path, src, prompt=input):
-    # Can set an HTTP redirection.
-    previous_uri = retrieve_document_uri(previous_path)
-    article = Article.find(uri=previous_uri)
+        article.title = self.parse_title(html)
+        article.introduction = self.parse_introduction(html)
+        article.content = self.parse_content(html)
 
-    new_uri = retrieve_document_uri(new_path)
-    article.uri = new_uri
+        category_uri = self.parse_category(html)
+        article.category = self.insert_category(category_uri)
 
-    update_article(new_path, src, prompt)
+        tag_uris = self.parse_tags(html)
+        article.tags = self.insert_tags(tag_uris)
 
+        article.last_update = date.today()
 
-def delete_article(path):
-    # Can clean orphan tags.
-    uri = retrieve_document_uri(path)
-    article = Article.find(uri=uri)
-    db.session.delete(article)
+        return article
 
+    # Helpers
 
-# Helpers
+    def insert_category(self, uri: str) -> Category:
+        """Create the article's category, if it doesn't exist yet."""
+        category = Category.find(uri=uri)
 
-def insert_category(uri, ask=input):
-    category = Category.find(uri=uri)
+        if not category:
+            name = self.prompt(
+                f'Please enter a name for the new "{uri}" category: ')
+            category = Category(name=name, uri=uri)
+            category.save()
 
-    if not category:
-        name = ask('Please enter a name for the new "{tag}" category: ')
-        category = Category(name=name, uri=uri)
-        category.save()
+        return category
 
-    return category
+    def insert_tags(self, uris: Iterable[str]) -> List[Tag]:
+        """Create the article's tags, if they don't exist yet."""
+        tags = Tag.filter(uri=uris).all()
 
+        existing = set([tag.uri for tag in tags])
+        new = set(uris) - existing
 
-def insert_tags(uris, ask=input):
-    tags = Tag.filter(uri=uris).all()
+        for uri in new:
+            name = self.prompt('Please enter a name for the new "{uri}" tag: ')
+            tag = Tag(name=name, uri=uri)
+            tag.save()
+            tags.append(tag)
 
-    existing = set([tag.uri for tag in tags])
-    new = set(uris) - existing
+        return tags
 
-    for uri in new:
-        name = ask('Please enter a name for the new "{tag}" tag: ')
-        tag = Tag(name=name, uri=uri)
-        tag.save()
-        tags.append(tag)
+    @staticmethod
+    def parse_category(html: BeautifulSoup) -> Optional[str]:
+        """Search the category of an article, inside its HTML source."""
+        try:
+            return html.head.select_one('meta[name=description]')['content']
+        except (KeyError, TypeError):
+            return None
 
-    return tags
+    @staticmethod
+    def parse_content(html: BeautifulSoup) -> Optional[str]:
+        """Search the content of an article, inside its HTML source."""
+        try:
+            return ''.join(str(child) for child in html.body.find_all())
+        except AttributeError:
+            return None
+
+    @staticmethod
+    def parse_introduction(html: BeautifulSoup) -> Optional[str]:
+        """Search the introduction of an article, inside its HTML source."""
+        try:
+            return html.body.select_one('#preamble').text.strip()
+        except AttributeError:
+            return None
+
+    @staticmethod
+    def parse_tags(html: BeautifulSoup) -> List[str]:
+        """Search the tags of an article, inside its HTML source."""
+        try:
+            tags = html.head.select_one('meta[name=keywords]')['content']
+        except (KeyError, TypeError):
+            return list()
+
+        return tags.split(', ')
+
+    @staticmethod
+    def parse_title(html: BeautifulSoup) -> Optional[str]:
+        """Search the title of an article, inside its HTML source."""
+        try:
+            return html.body.select_one('h1').text
+        except AttributeError:
+            return None

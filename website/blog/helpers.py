@@ -1,3 +1,5 @@
+"""Collection of helper functions."""
+
 from datetime import date, timedelta
 from typing import List
 

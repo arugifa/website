@@ -1,3 +1,5 @@
+"""Base classes to be inherited from by factories all over the website."""
+
 from factory.alchemy import SQLAlchemyModelFactory
 
 from website import db

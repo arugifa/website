@@ -1,3 +1,5 @@
+"""Different configurations, to be used in different environments."""
+
 import os
 from pathlib import Path
 

@@ -1,3 +1,5 @@
+"""Global web pages of my website."""
+
 from flask import render_template
 
 from website import website

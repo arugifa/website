@@ -1,3 +1,6 @@
+"""All high-level exceptions raised inside my website."""
+
+
 class WebsiteException(Exception):
     """Base exception for all project's exceptions."""
 
