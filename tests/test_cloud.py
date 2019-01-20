@@ -1,7 +1,7 @@
 from openstack.exceptions import NotFoundException
 import pytest
 
-from website.cloud import TEST_CONTAINERS_PREFIX
+from website.cloud import TEST_CONTAINER_PREFIX
 from website.cloud.factories import ContainerFactory, ObjectFactory
 from website.cloud.helpers import retrieve_test_containers
 from website.cloud.stubs import ConnectionStub
@@ -12,7 +12,7 @@ class TestObjectStore:
     # Containers
 
     def test_create_container(self, cloud):
-        name = f'{TEST_CONTAINERS_PREFIX}_container'
+        name = f'{TEST_CONTAINER_PREFIX}_container'
         container = cloud.object_store.create_container(name=name)
         assert container.name == 'test_container'
 
@@ -36,7 +36,7 @@ class TestObjectStore:
         assert actual.name == expected.name
 
     def test_get_unexisting_container_metadata(self, cloud):
-        container = f'{TEST_CONTAINERS_PREFIX}_container'
+        container = f'{TEST_CONTAINER_PREFIX}_container'
 
         with pytest.raises(NotFoundException):
             actual = cloud.object_store.get_container_metadata(container)

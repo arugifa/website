@@ -4,8 +4,9 @@ import logging
 from abc import ABC, abstractmethod
 from datetime import date
 from pathlib import Path
-from typing import Callable, Iterable, List
+from typing import Callable, Iterable, List, Mapping
 
+from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 
 from website import db
@@ -30,6 +31,8 @@ class ContentManager:
     Documents in this repository are loaded, processed, and finally stored,
     updated or deleted inside the database.
 
+    :param app:
+        ...
     :param repository:
         Git repository's path.
     :param reader:
@@ -44,8 +47,9 @@ class ContentManager:
     }
 
     def __init__(
-            self, repository: Path,
+            self, app: Flask, repository: Path,
             reader: Callable = open, prompt: Callable = input):
+        self.app = app
         self.repository = repository
         self.reader = reader
         self.prompt = prompt
@@ -53,6 +57,22 @@ class ContentManager:
         self.handlers = {
             category: handler(db, reader, prompt)
             for category, handler in self.HANDLERS.items()}
+
+    def update(self, diff: Mapping) -> None:
+        with self.app.app_context():
+            try:
+                self.add(diff['added'])
+                self.modify(diff['modified'])
+                self.rename(diff['renamed'])
+                self.delete(diff['deleted'])
+
+                db.session.commit()
+
+            except Exception:
+                db.session.rollback()
+                logger.error("No change has been made to the database")
+
+    # Helpers
 
     def add(self, paths: Iterable[Path]) -> List[Document]:
         """Insert documents into database.
@@ -79,6 +99,21 @@ class ContentManager:
             handler = self.get_handler(path)
             handler.delete(path)
 
+    def modify(self, paths: Iterable[Path]) -> List[Document]:
+        """Update documents in database.
+
+        :param paths: document paths.
+        """
+        documents = []
+
+        for path in paths:
+            path = path.relative_to(self.repository)
+            handler = self.get_handler(path)
+            document = handler.update(path)
+            documents.add(document)
+
+        return documents
+
     def rename(self, paths: Iterable[Path]) -> List[Document]:
         """Rename documents in database.
 
@@ -99,21 +134,6 @@ class ContentManager:
             dst = dst.relative_to(self.repository)
             handler = self.get_handler(src)
             document = handler.rename(src, dst)
-            documents.add(document)
-
-        return documents
-
-    def update(self, paths: Iterable[Path]) -> List[Document]:
-        """Update documents in database.
-
-        :param paths: document paths.
-        """
-        documents = []
-
-        for path in paths:
-            path = path.relative_to(self.repository)
-            handler = self.get_handler(path)
-            document = handler.update(path)
             documents.add(document)
 
         return documents

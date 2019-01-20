@@ -3,14 +3,14 @@ from hashlib import md5
 from openstack.exceptions import NotFoundException
 
 
-class ConnectionStub:
+class CloudConnectionStub:
     def __init__(self, username, api_key, region):
-        self.object_store = ObjectStoreStub()
+        self.object_store = CloudObjectStoreStub()
 
         # TODO: test raise SDKException
 
 
-class ObjectStoreStub:
+class CloudObjectStoreStub:
     def __init__(self):
         self._containers = dict()
 
@@ -25,7 +25,7 @@ class ObjectStoreStub:
         error = "Don't mess up with PROD data!"
         assert name.startswith('test'), error
 
-        container = ContainerStub(attrs)
+        container = CloudContainerStub(attrs)
         self._containers[name] = container
         return container
 
@@ -79,18 +79,18 @@ class ObjectStoreStub:
             'name': object_name,
         }
 
-        obj = ObjectStub(object_attributes)
+        obj = CloudObjectStub(object_attributes)
         container._objects[object_name] = obj
         return obj
 
 
-class ContainerStub:
+class CloudContainerStub:
     def __init__(self, attrs):
         self._objects = dict()
         self.name = attrs['name']
 
 
-class ObjectStub:
+class CloudObjectStub:
     def __init__(self, attrs):
         self._data = attrs['data']
         self.container = attrs['container']
