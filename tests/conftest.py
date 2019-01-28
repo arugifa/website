@@ -1,3 +1,4 @@
+import re
 import shlex
 from subprocess import PIPE, run
 
@@ -7,10 +8,9 @@ import webtest
 from rackspace.connection import Connection
 
 from website import create_app, db as _db
-from website.cloud.factories import BaseCloudFactory
-from website.cloud.helpers import retrieve_test_containers
-from website.cloud.stubs import ConnectionStub
 from website.config import TestingConfig
+from website.factories import BaseCloudFactory
+from website.stubs import CloudConnectionStub
 from website.test.integration import (
     CommandLine, InvokeStub, RunReal, RunStub)
 from website.test.pytest import FixtureMarker
@@ -29,9 +29,9 @@ def pytest_addoption(parser):
 def pytest_generate_tests(metafunc):
     if 'cloud' in metafunc.fixturenames:
         if metafunc.module.__name__ == 'test_cloud':
-            params = [ConnectionStub, Connection]
+            params = [CloudConnectionStub, Connection]
         else:
-            params = [ConnectionStub]
+            params = [CloudConnectionStub]
 
         metafunc.parametrize('cloud_connection', params, indirect=True)
 
@@ -65,7 +65,7 @@ def client(app):
 
 @pytest.fixture(scope='module')
 @integration_test
-def cloud_connection(request):
+def cloud_client(request):
     username = request.config.getoption('cloud_username')
     api_key = request.config.getoption('cloud_api_key')
     region = request.config.getoption('cloud_region')
@@ -74,26 +74,17 @@ def cloud_connection(request):
     if not all(config) and request.param is Connection:
         return pytest.skip("Cloud connection not configured")
 
-    cloud = BaseCloudFactory._meta.cloud
-    cloud.reset(username, api_key, region, cls=request.param)
+    cloud_client = BaseCloudFactory._meta.cloud
+    cloud_client.reset(username, api_key, region, cls=request.param)
 
-    return cloud.connection
+    return cloud_client
 
 
 @pytest.fixture
 @integration_test
-def cloud(cloud_connection):
-    yield cloud_connection
-
-    test_containers = retrieve_test_containers(cloud_connection)
-
-    for container in test_containers:
-        objects = list(cloud_connection.object_store.objects(container))
-
-        for obj in objects:
-            cloud_connection.object_store.delete_object(obj)
-
-        cloud_connection.object_store.delete_container(container)
+def cloud(cloud_client):
+    yield cloud_client
+    cloud_client.clean()
 
 
 @pytest.fixture
@@ -134,3 +125,25 @@ def shell():
         return run(cmdline, check=True, stdout=PIPE, encoding='utf-8')
 
     return runner
+
+
+# Fixes
+
+# TODO: Update pytest-splinter when issue #112 is fixed (01/2019)
+# See https://github.com/pytest-dev/pytest-splinter/issues/112
+# When not using this patch, Pytest fails with:
+#   Fixture "tmpdir" called directly. Fixtures are not meant to be called directly,
+#   but are created automatically when test functions request them as parameters.
+
+def _mk_tmp(request, factory):
+    name = request.node.name
+    name = re.sub(r"[\W]", "_", name)
+    MAXVAL = 30
+    name = name[:MAXVAL]
+    return factory.mktemp(name, numbered=True)
+
+
+@pytest.fixture(scope='session')
+def session_tmpdir(request, tmpdir_factory):
+    """pytest tmpdir which is session-scoped."""
+    return _mk_tmp(request, tmpdir_factory)

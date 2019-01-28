@@ -6,11 +6,11 @@ from typing import Iterable, List, Optional
 
 from bs4 import BeautifulSoup
 
-from website.blogs.models import Article, Category, Tag
-from website.content import DocumentHandler
+from website.blog.models import Article, Category, Tag
+from website.content import BaseDocumentHandler
 
 
-class ArticleHandler(DocumentHandler):
+class ArticleHandler(BaseDocumentHandler):
     """Manage articles life cycle."""
 
     def add(self, path: Path) -> Article:
@@ -18,7 +18,7 @@ class ArticleHandler(DocumentHandler):
         uri = self.parse_uri(path)
         date = self.parse_date(path)
 
-        source = self.read(path)
+        source = self.load(path)
         html = BeautifulSoup(source, 'html.parser')
 
         title = self.parse_title(html)
@@ -63,7 +63,7 @@ class ArticleHandler(DocumentHandler):
         uri = self.parse_uri(path)
         article = Article.find(uri=uri)
 
-        source = self.read(path)
+        source = self.load(path)
         html = BeautifulSoup(source, 'html.parser')
 
         article.title = self.parse_title(html)

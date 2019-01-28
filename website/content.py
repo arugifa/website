@@ -3,15 +3,14 @@
 import logging
 from abc import ABC, abstractmethod
 from datetime import date
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Callable, Iterable, List, Mapping
 
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 
 from website import db
-from website.blog.contenthandlers import ArticleHandler
-from website.exceptions import UpdateContentException
+from website.exceptions import DocumentLoadingError
 from website.models import Document
 
 logger = logging.getLogger(__name__)
@@ -42,12 +41,8 @@ class ContentManager:
         when certain things cannot be completely done automatically.
     """
 
-    HANDLERS = {
-        'blog': ArticleHandler,
-    }
-
     def __init__(
-            self, app: Flask, repository: Path,
+            self, app: Flask, repository: Path, handlers: Mapping[str, 'DocumentHandler'],
             reader: Callable = open, prompt: Callable = input):
         self.app = app
         self.repository = repository
@@ -71,8 +66,6 @@ class ContentManager:
             except Exception:
                 db.session.rollback()
                 logger.error("No change has been made to the database")
-
-    # Helpers
 
     def add(self, paths: Iterable[Path]) -> List[Document]:
         """Insert documents into database.
@@ -181,7 +174,7 @@ class ContentManager:
             raise KeyError(error % path)
 
 
-class DocumentHandler(ABC):
+class BaseDocumentHandler(ABC):
     """Manage documents life cycle.
 
     Load document sources from local files, and update their state in database.
@@ -211,43 +204,16 @@ class DocumentHandler(ABC):
         """Remove a document from database."""
 
     @abstractmethod
-    def rename(self, path) -> Document:
+    def rename(self, path: Path) -> Document:
         """Rename a document in database."""
 
     @abstractmethod
-    def update(self, path) -> Document:
+    def update(self, path: Path) -> Document:
         """Update a document in database."""
 
     # Helpers
 
-    @staticmethod
-    def parse_date(path: Path) -> date:
-        """Return the creation date of a document, based on its path.
-
-        :param path:
-            document's path (e.g., ``<YEAR>/<MONTH>-<DAY>.<URI>.<EXTENSION>``).
-        :raise ValueError:
-            if the  document's path doesn't contain a proper date.
-        """
-        try:
-            year = int(path.parents[0].name)
-            month, day = map(int, path.name.split('.')[0].split('-'))
-        except (IndexError, TypeError, ValueError):
-            error = 'Path "%s" does not contain a proper date'
-            logger.error(error, path)
-            raise ValueError(error % path)
-
-        return date(year, month, day)
-
-    @staticmethod
-    def parse_uri(path: Path) -> str:
-        """Return the URI of a document, based on its path.
-
-        :param path: document's path (e.g., ``<URI>.<EXTENSION>``).
-        """
-        return path.stem.split('.')[-1]
-
-    def read(self, path: Path) -> str:
+    def load(self, path: Path) -> str:
         """Read document's source file.
 
         :param path: document's path.
@@ -257,4 +223,54 @@ class DocumentHandler(ABC):
         except (OSError, UnicodeDecodeError) as exc:
             error = "Unable to read %s: %s"
             logger.error(error, path, exc)
-            raise UpdateContentException(error % (path, exc))
+            raise DocumentLoadingError(error % (path, exc))
+
+    @staticmethod
+    def parse_date(path: PurePath) -> date:
+        """Return the creation date of a document, based on its path.
+
+        :param path:
+            document's path, relative to its repository
+            (e.g., ``blog/<YEAR>/<MONTH>-<DAY>.<URI>.<EXTENSION>``).
+        :raise ValueError:
+            if the  document's path doesn't contain a proper date.
+        """
+        try:
+            year = int(path.parents[0].name)
+            month, day = map(int, path.name.split('.')[0].split('-'))
+        except (IndexError, TypeError):
+            error = 'Path "%s" does not contain a proper date'
+            logger.error(error, path)
+            raise ValueError(error % path)
+
+        return date(year, month, day)
+
+    @staticmethod
+    def parse_uri(path: PurePath) -> str:
+        """Return the URI of a document, based on its path.
+
+        :param path:
+            document's path, relative to its repository
+            (e.g., ``blog/<YEAR>/<MONTH>-<DAY>.<URI>.<EXTENSION>``).
+        """
+        return path.stem.split('.')[-1]
+
+
+class BaseDocumentReader(ABC):
+    def __init__(self):
+        #: Path of the currently read document.
+        #: Initialized when calling a reader instance later on.
+        self.path = None
+
+    def __call__(self, path: Path):
+        """Prepare the reader for further reading."""
+        self.path = path
+        return self
+
+    @abstractmethod
+    def read(self) -> str:
+        """Effectively read the document located at :attr:`path`.
+
+        :raise OSError: when cannot open the document.
+        :raise UnicodeDecodeError: when cannot read the document's content.
+        """

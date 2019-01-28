@@ -1,10 +1,96 @@
+import gzip
 from datetime import date
+from pathlib import PurePath
 
 import pytest
 
-from website import content
-from website.exceptions import UpdateContentException
+from website import exceptions
+from website.blog.content import ArticleHandler
 
+
+class BaseDocumentHandlerTest:
+    handler = None  # Handler class to test
+
+    @pytest.fixture
+    def documents(self, db):
+        return self.handler(db)
+
+    # Document's Date
+
+    def test_parse_document_date(self, documents):
+        path = PurePath('blog/2018/04-08.article.txt')
+        actual = documents.parse_date(path)
+        assert actual == date(2018, 4, 8)
+
+    def test_document_must_be_stored_inside_a_directory(self, documents):
+        path = PurePath('04-08.article.txt')
+        with pytest.raises(ValueError):
+            documents.parse_date(path)
+
+    def test_document_directory_must_contain_year_number(self, documents):
+        path = PurePath('blog/invalid_year/04-08.article.txt')
+        with pytest.raises(ValueError):
+            documents.parse_date(path)
+
+    def test_document_name_must_contain_month_and_day_numbers(self, documents):
+        path = PurePath('blog/2019/article.txt')
+        with pytest.raises(ValueError):
+            documents.parse_date(path)
+
+        path = PurePath('blog/2019/04.article.txt')
+        with pytest.raises(ValueError):
+            documents.parse_date(path)
+
+        path = PurePath('blog/2019/04-.article.txt')
+        with pytest.raises(ValueError):
+            documents.parse_date(path)
+
+        path = PurePath('blog/2019/john-doe.article.txt')
+        with pytest.raises(ValueError):
+            documents.parse_date(path)
+
+    # Document's URI
+
+    def test_parse_document_uri(self, documents):
+        path = PurePath('article.txt')
+        actual = documents.parse_uri(path)
+        assert actual == 'article'
+
+    def test_get_uri_from_path_with_date(self, documents):
+        path = PurePath('04-08.article.txt')
+        actual = documents.parse_uri(path)
+        assert actual == 'article'
+
+    # Load Document
+
+    def test_load_document(self, documents, tmp_path):
+        document = tmp_path / 'article.txt'
+        document.write_text("Hello, World!")
+
+        content = documents.load(document)
+        assert content == "Hello, World!"
+
+    def test_load_not_existing_document(self, documents, tmp_path):
+        document = tmp_path / 'void.txt'
+
+        with pytest.raises(exceptions.DocumentLoadingError):
+            documents.load(document)
+
+    def test_load_not_supported_document_format(self, documents, tmp_path):
+        archive = tmp_path / 'archive.gz'
+
+        with gzip.open(str(archive), 'wb') as f:
+            f.write(b'random content')
+
+        with pytest.raises(exceptions.DocumentLoadingError):
+            documents.load(archive)  # Not Unicode
+
+
+class TestArticleHandler(BaseDocumentHandlerTest):
+    handler = ArticleHandler
+
+
+"""
 
 # Main API Tests
 
@@ -107,48 +193,4 @@ class TestGetDocumentCategory:
         with pytest.raises(ValueError):
                 content.get_document_category(path)
 
-
-class TestGetDocumentDate:
-    def test_get_date(self):
-        path = 'blog/2018/04-08.article.txt'
-        actual = content.get_document_date(path)
-        assert actual == date(2018, 4, 8)
-
-    def test_document_must_be_classified_in_a_directory(self):
-        path = '04-08.article.txt'
-        with pytest.raises(ValueError):
-            content.get_document_date(path)
-
-    def test_document_directory_must_contain_year_number(self):
-        path = 'blog/test/04-08.article.txt'
-        with pytest.raises(ValueError):
-            content.get_document_date(path)
-
-    def test_document_name_must_contain_month_and_day_numbers(self):
-        path = 'blog/test/article.txt'
-        with pytest.raises(ValueError):
-            content.get_document_date(path)
-
-        path = 'blog/test/04.article.txt'
-        with pytest.raises(ValueError):
-            content.get_document_date(path)
-
-        path = 'blog/test/04-.article.txt'
-        with pytest.raises(ValueError):
-            content.get_document_date(path)
-
-        path = 'blog/test/john-doe.article.txt'
-        with pytest.raises(ValueError):
-            content.get_document_date(path)
-
-
-class TestGetDocumentURI:
-    def test_get_uri(self):
-        path = 'article.txt'
-        actual = content.get_document_uri(path)
-        assert actual == 'article'
-
-    def test_get_uri_from_path_with_date(self):
-        path = '04-08.article.txt'
-        actual = content.get_document_uri(path)
-        assert actual == 'article'
+"""

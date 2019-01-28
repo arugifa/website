@@ -34,11 +34,11 @@ def create_app(config):
     from .blog import blog
     app.register_blueprint(blog)
 
-    from .notes import notes
-    app.register_blueprint(notes, url_prefix='/notes')
+    # from .notes import notes
+    # app.register_blueprint(notes, url_prefix='/notes')
 
-    from .recommended import recommended
-    app.register_blueprint(recommended, url_prefix='/recommended')
+    # from .recommended import recommended
+    # app.register_blueprint(recommended, url_prefix='/recommended')
 
     return app
 

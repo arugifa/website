@@ -10,7 +10,7 @@ from openstack.object_store.v1.container import Container
 from openstack.object_store.v1.obj import Object
 
 from website import db
-from website.test import CloudTestClient, TEST_CONTAINER_PREFIX
+from website.test.cloud import CloudTestClient, TEST_CONTAINER_PREFIX
 
 
 # Database

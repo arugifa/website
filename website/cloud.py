@@ -5,7 +5,7 @@ They all contain side effects and are not tested!
 import logging
 from hashlib import md5
 from pathlib import Path
-from typing import BinaryIO, Callable, Generator, TextIO
+from typing import BinaryIO, Callable, Generator, Iterable, List, Mapping, TextIO
 
 from openstack.exceptions import ResourceNotFound, SDKException
 from rackspace.connection import Connection
@@ -36,14 +36,14 @@ class CloudManager:
         self.container = Container.existing(connection=self._connection, **_container._attrs)
 
     def update(self, src: Path) -> None:
-        local_files = set(str(path.relative_to(src)) for path in src.rglob('*') if path.is_file()}
+        local_files = set(str(path.relative_to(src)) for path in src.rglob('*') if path.is_file())
         # set(obj.name for obj in self.object_store.objects(self.container))
         remote_files = set(obj.name for obj in self.container.objects)
 
         # Update remote files.
-        to_delete = [path in remote_files - local_files]
+        to_delete = list(remote_files - local_files)
         to_add = {path: src / path for path in local_files - remote_files}
-        to_compare = {path: src / path for path in local_files - set(to_add)]
+        to_compare = {path: src / path for path in local_files - set(to_add)}
 
         self._add(to_add) if to_add else logger.info("No new file to upload")
         self._update(to_compare)
@@ -75,7 +75,7 @@ class CloudManager:
 
         return md5sum.hexdigest()
 
-    def _add(self, local_files: Iterable[str, Path]) -> List[Callable]:
+    def _add(self, local_files: Mapping[str, Path]) -> List[Callable]:
         added = []
 
         logger.info("Uploading new files...")

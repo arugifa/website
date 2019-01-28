@@ -10,11 +10,12 @@ from invoke import task
 from rackspace.connection import Connection as CloudConnection
 
 from website import create_app, db as _db
-from website.cloud.stubs import CloudConnectionStub
-from website.cloud.utils import CloudManager
+from website.blog.content import ArticleHandler
+from website.cloud import CloudManager
 from website.config import DevelopmentConfig
 from website.content import ContentManager
 from website.helpers import setup_demo
+from website.stubs import CloudConnectionStub
 from website.utils import git
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
 
@@ -107,8 +108,9 @@ def update(ctx, db, repository, commit='HEAD~1', force=False):
         confirm()
 
     # Update documents in database.
-    content_reader = AsciidoctorToHTMLConverter(invoke_shell)
-    content = ContentManager(repository, content_reader)
+    document_handlers = {'blog': ArticleHandler}
+    document_reader = AsciidoctorToHTMLConverter(invoke_shell)
+    content = ContentManager(app, repository, document_handlers, reader=document_reader)
     content.update(diff)
 
 
@@ -132,10 +134,10 @@ def deploy(ctx, user_name, api_key, region, container_name, noop=False):
     app = create_app(DevelopmentConfig)
     static_files = app.config['FREEZER_DESTINATION']
 
-    connection_class = TESTING['cloud'] if noop else PRODUCTION['cloud']
+    cloud = TESTING['cloud'] if noop else PRODUCTION['cloud']
 
     try:
-        website = CloudManager(user_name, api_key, region, cls=connection_class)
+        website = CloudManager(user_name, api_key, region, cls=cloud)
         website.update(static_files)
     except CloudConnectionError as exc:
         exit("Seems like there are some perturbations in the Cloud today! :o")

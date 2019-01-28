@@ -17,5 +17,9 @@ class MultipleResultsFound(WebsiteException):
 
 # Content Exceptions
 
-class UpdateContentException(WebsiteException):
-    """Raised if an error happens when loading website's content into database."""  # noqa: E501
+class DocumentError(WebsiteException):
+    pass
+
+
+class DocumentLoadingError(WebsiteException):
+    pass

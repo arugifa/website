@@ -1,7 +1,7 @@
 """Blog models."""
 
 from datetime import date
-from typing import Generator
+from typing import Iterator
 
 from website import db
 from website.models import BaseModel, Document
@@ -31,11 +31,11 @@ class Article(Document):
     publication_date = db.Column(db.Date, default=date.today, nullable=False)
     last_update = db.Column(db.Date)
 
-    category = db.Relationship('Category', back_populates='articles')
+    category = db.relationship('Category', back_populates='articles')
     tags = db.relationship('Tag', secondary='tags', back_populates='articles')
 
     @classmethod
-    def latest_ones(cls) -> Generator['Article']:
+    def latest_ones(cls) -> Iterator['Article']:
         """Return articles ordered by publication date, in descending order.
 
         More precisely, articles are sorted by:
@@ -67,7 +67,7 @@ class Tag(BaseModel):
 
     uri = db.Column(db.String, unique=True, nullable=False)
     name = db.Column(db.String, nullable=False)
-    articles = db.Relationship('Article', secondary='tags', back_populates='tags')  # noqa: E501
+    articles = db.relationship('Article', secondary='tags', back_populates='tags')  # noqa: E501
 
 
 # Many-to-Many Relationships

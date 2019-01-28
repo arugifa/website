@@ -3,7 +3,7 @@ from collections import abc
 from pathlib import Path
 from typing import Callable
 
-from website.cloud.compat import Container as _Container
+from website.compat import Container as _Container
 
 logger = logging.getLogger(__name__)
 
