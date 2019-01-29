@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 
 from website.blog.models import Article, Category, Tag
 from website.content import BaseDocumentHandler
+from website.exceptions import DocumentNotFound
 
 
 class ArticleHandler(BaseDocumentHandler):
@@ -76,10 +77,18 @@ class ArticleHandler(BaseDocumentHandler):
         return self.update()
 
     def delete(self) -> None:
-        """Delete an article from database."""
+        """Delete an article from database.
+
+        :raise website.exceptions.DocumentNotFound:
+            if the article doesn't exist.
+        """
         uri = self.parse_uri()
         article = Article.find(uri=uri)
-        article.delete()
+
+        try:
+            article.delete()
+        except AttributeError:
+            raise DocumentNotFound(uri)
 
     # Helpers
 

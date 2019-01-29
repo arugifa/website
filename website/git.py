@@ -3,7 +3,7 @@ from collections import defaultdict
 from functools import partial
 from pathlib import Path
 from subprocess import PIPE, run
-from typing import Callable, Dict, Mapping, TextIO, Union
+from typing import Callable, Dict, TextIO, Union
 
 
 class Repository:
@@ -16,8 +16,7 @@ class Repository:
         self.path = Path(path).resolve()
 
     def diff(
-            self, from_commit: str, to_commit: str = 'HEAD',
-            shell: Callable = None, output: TextIO = None) -> Dict[str, Path]:  # noqa: E501
+            self, from_commit: str, to_commit: str = 'HEAD', shell: Callable = None) -> Dict[str, Path]:  # noqa: E501
         """Return diff between two commits.
 
         :param run:
@@ -51,9 +50,6 @@ class Repository:
             else:
                 diff[status[0]].append(paths[0])
 
-        if output:
-            self.print_diff(diff, output)
-
         return {
             'added': diff['A'],
             'modified': diff['M'],
@@ -61,9 +57,10 @@ class Repository:
             'deleted': diff['D'],
         }
 
-    @staticmethod
-    def print_diff(diff: Mapping, output: TextIO = sys.stdout):
+    def print_diff(self, *args, output: TextIO = sys.stdout, **kwargs) -> Dict[str, Path]:
         """Print Git diff."""
+        diff = self.diff(*args, **kwargs)
+
         for action, files in diff.items():
             if files:
                 print(f'The following files have been {action}:', file=output)

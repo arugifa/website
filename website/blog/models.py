@@ -32,7 +32,7 @@ class Article(Document):
     last_update = db.Column(db.Date)
 
     category = db.relationship('Category', back_populates='articles')
-    tags = db.relationship('Tag', secondary='tags', back_populates='articles')
+    tags = db.relationship('Tag', secondary='article_tags', back_populates='articles')
 
     @classmethod
     def latest_ones(cls) -> Iterator['Article']:
@@ -67,7 +67,7 @@ class Tag(BaseModel):
 
     uri = db.Column(db.String, unique=True, nullable=False)
     name = db.Column(db.String, nullable=False)
-    articles = db.relationship('Article', secondary='tags', back_populates='tags')  # noqa: E501
+    articles = db.relationship('Article', secondary='article_tags', back_populates='tags')  # noqa: E501
 
 
 # Many-to-Many Relationships

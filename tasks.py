@@ -3,7 +3,7 @@
 import logging
 from functools import partial
 from pathlib import Path
-from sys import exit, stdout
+from sys import exit
 
 from flask_frozen import Freezer
 from invoke import task
@@ -102,7 +102,7 @@ def update(ctx, db, repository, commit='HEAD~1', force=False):
     # Get list of modified documents in the repository.
     repository = Repository(repository)
     invoke_shell = partial(ctx.run, hide='stdout')
-    diff = repository.diff(commit, shell=invoke_shell, output=stdout)
+    diff = repository.print_diff(commit, shell=invoke_shell)
 
     if not force:
         confirm()

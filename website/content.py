@@ -155,19 +155,35 @@ class BaseDocumentHandler(ABC):
 
     @abstractmethod
     def insert(self) -> Document:
-        """Insert a document into database."""
+        """Insert a document into database.
 
-    @abstractmethod
-    def delete(self) -> None:
-        """Remove a document from database."""
-
-    @abstractmethod
-    def rename(self, new_path: Path) -> Document:
-        """Rename a document in database."""
+        :raise website.exceptions.DocumentAlreadyExists:
+            if a conflict happens during document insertion.
+        """
 
     @abstractmethod
     def update(self) -> Document:
-        """Update a document in database."""
+        """Update a document in database.
+
+        :raise website.exceptions.DocumentNotFound:
+            if the document doesn't exist.
+        """
+
+    @abstractmethod
+    def rename(self, new_path: Path) -> Document:
+        """Rename a document in database.
+
+        :raise website.exceptions.DocumentNotFound:
+            if the document doesn't exist.
+        """
+
+    @abstractmethod
+    def delete(self) -> None:
+        """Remove a document from database.
+
+        :raise website.exceptions.DocumentNotFound:
+            if the document doesn't exist.
+        """
 
     # Helpers
 
