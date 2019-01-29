@@ -3,7 +3,7 @@
 import logging
 from functools import partial
 from pathlib import Path
-from sys import exit
+from sys import exit, stdout
 
 from flask_frozen import Freezer
 from invoke import task
@@ -14,12 +14,14 @@ from website.blog.content import ArticleHandler
 from website.cloud import CloudManager
 from website.config import DevelopmentConfig
 from website.content import ContentManager
+from website.exceptions import ContentUpdateException
+from website.git import Repository
 from website.helpers import setup_demo
 from website.stubs import CloudConnectionStub
-from website.utils import git
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
 
 here = Path(__file__).parent
+logger = logging.getLogger(__name__)
 
 SOURCE_CODE = here / 'website'
 CSS_FILE = SOURCE_CODE / 'static/stylesheet.css'
@@ -98,20 +100,26 @@ def update(ctx, db, repository, commit='HEAD~1', force=False):
     app = create_app(config)
 
     # Get list of modified documents in the repository.
-    repository = Path(repository).resolve()
-
-    with ctx.cd(repository):
-        invoke_shell = partial(ctx.run, hide='stdout')
-        diff = git.diff(commit, shell=invoke_shell)
+    repository = Repository(repository)
+    invoke_shell = partial(ctx.run, hide='stdout')
+    diff = repository.diff(commit, shell=invoke_shell, output=stdout)
 
     if not force:
         confirm()
 
     # Update documents in database.
-    document_handlers = {'blog': ArticleHandler}
-    document_reader = AsciidoctorToHTMLConverter(invoke_shell)
-    content = ContentManager(app, repository, document_handlers, reader=document_reader)
-    content.update(diff)
+    handlers = {'blog': ArticleHandler}
+    reader = AsciidoctorToHTMLConverter(invoke_shell)
+    content = ContentManager(handlers, reader)
+
+    with app.app_context():
+        try:
+            content.update(repository.path, diff)
+        except ContentUpdateException:
+            _db.session.rollback()
+            logger.error("No change has been made to the database")
+        else:
+            _db.session.commit()
 
 
 # Deployment

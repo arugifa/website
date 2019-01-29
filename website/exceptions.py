@@ -21,5 +21,9 @@ class DocumentError(WebsiteException):
     pass
 
 
-class DocumentLoadingError(WebsiteException):
+class DocumentReadingError(WebsiteException):
+    pass
+
+
+class ContentUpdateException(WebsiteException):
     pass

@@ -13,12 +13,12 @@ from website.content import BaseDocumentHandler
 class ArticleHandler(BaseDocumentHandler):
     """Manage articles life cycle."""
 
-    def add(self, path: Path) -> Article:
+    def insert(self) -> Article:
         """Insert an article into database."""
-        uri = self.parse_uri(path)
-        date = self.parse_date(path)
+        uri = self.parse_uri()
+        date = self.parse_date()
 
-        source = self.load(path)
+        source = self.read()
         html = BeautifulSoup(source, 'html.parser')
 
         title = self.parse_title(html)
@@ -41,29 +41,12 @@ class ArticleHandler(BaseDocumentHandler):
 
         return article
 
-    def delete(self, path: Path) -> None:
-        """Delete an article from database."""
-        uri = self.parse_uri(path)
-        article = Article.find(uri=uri)
-        article.delete()
-
-    def rename(self, previous_path: Path, new_path: Path) -> Article:
-        """Rename an article in database."""
-        # TODO: Set an HTTP redirection (01/2019)
-        previous_uri = self.parse_uri(previous_path)
-        article = Article.find(uri=previous_uri)
-
-        new_uri = self.parse_uri(new_path)
-        article.uri = new_uri
-
-        return self.update(new_path)
-
-    def update(self, path: Path) -> Article:
+    def update(self) -> Article:
         """Update an article in database."""
-        uri = self.parse_uri(path)
+        uri = self.parse_uri(self.path)
         article = Article.find(uri=uri)
 
-        source = self.load(path)
+        source = self.read(self.path)
         html = BeautifulSoup(source, 'html.parser')
 
         article.title = self.parse_title(html)
@@ -79,6 +62,24 @@ class ArticleHandler(BaseDocumentHandler):
         article.last_update = date.today()
 
         return article
+
+    def rename(self, new_path: Path) -> Article:
+        """Rename an article in database."""
+        # TODO: Set an HTTP redirection (01/2019)
+        previous_uri = self.parse_uri()
+        article = Article.find(uri=previous_uri)
+
+        self.path = new_path
+        new_uri = self.parse_uri()
+        article.uri = new_uri
+
+        return self.update()
+
+    def delete(self) -> None:
+        """Delete an article from database."""
+        uri = self.parse_uri()
+        article = Article.find(uri=uri)
+        article.delete()
 
     # Helpers
 

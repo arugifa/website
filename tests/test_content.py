@@ -11,79 +11,69 @@ from website.blog.content import ArticleHandler
 class BaseDocumentHandlerTest:
     handler = None  # Handler class to test
 
-    @pytest.fixture
-    def documents(self, db):
-        return self.handler(db)
-
     # Document's Date
 
-    def test_parse_document_date(self, documents):
+    def test_parse_document_date(self):
         path = PurePath('blog/2018/04-08.article.txt')
-        actual = documents.parse_date(path)
+        actual = self.handler(path).parse_date()
         assert actual == date(2018, 4, 8)
 
-    def test_document_must_be_stored_inside_a_directory(self, documents):
+    def test_document_must_be_stored_inside_a_directory(self):
         path = PurePath('04-08.article.txt')
         with pytest.raises(ValueError):
-            documents.parse_date(path)
+            self.handler(path).parse_date()
 
-    def test_document_directory_must_contain_year_number(self, documents):
+    def test_document_directory_must_contain_year_number(self):
         path = PurePath('blog/invalid_year/04-08.article.txt')
         with pytest.raises(ValueError):
-            documents.parse_date(path)
+            self.handler(path).parse_date()
 
-    def test_document_name_must_contain_month_and_day_numbers(self, documents):
-        path = PurePath('blog/2019/article.txt')
+    @pytest.mark.parametrize('path', [
+        'blog/2019/article.txt',
+        'blog/2019/04.article.txt',
+        'blog/2019/04-.article.txt',
+        'blog/2019/john-doe.article.txt',
+    ])
+    def test_document_name_must_contain_month_and_day_numbers(self, path):
+        path = PurePath(path)
         with pytest.raises(ValueError):
-            documents.parse_date(path)
-
-        path = PurePath('blog/2019/04.article.txt')
-        with pytest.raises(ValueError):
-            documents.parse_date(path)
-
-        path = PurePath('blog/2019/04-.article.txt')
-        with pytest.raises(ValueError):
-            documents.parse_date(path)
-
-        path = PurePath('blog/2019/john-doe.article.txt')
-        with pytest.raises(ValueError):
-            documents.parse_date(path)
+            self.handler(path).parse_date()
 
     # Document's URI
 
-    def test_parse_document_uri(self, documents):
+    def test_parse_document_uri(self):
         path = PurePath('article.txt')
-        actual = documents.parse_uri(path)
+        actual = self.handler(path).parse_uri()
         assert actual == 'article'
 
-    def test_get_uri_from_path_with_date(self, documents):
+    def test_get_uri_from_path_with_date(self):
         path = PurePath('04-08.article.txt')
-        actual = documents.parse_uri(path)
+        actual = self.handler(path).parse_uri()
         assert actual == 'article'
 
     # Load Document
 
-    def test_load_document(self, documents, tmp_path):
+    def test_load_document(self, tmp_path):
         document = tmp_path / 'article.txt'
         document.write_text("Hello, World!")
 
-        content = documents.load(document)
+        content = self.handler(document).read()
         assert content == "Hello, World!"
 
-    def test_load_not_existing_document(self, documents, tmp_path):
+    def test_load_not_existing_document(self, tmp_path):
         document = tmp_path / 'void.txt'
 
-        with pytest.raises(exceptions.DocumentLoadingError):
-            documents.load(document)
+        with pytest.raises(exceptions.DocumentReadingError):
+            self.handler(document).read()
 
-    def test_load_not_supported_document_format(self, documents, tmp_path):
+    def test_load_not_supported_document_format(self, tmp_path):
         archive = tmp_path / 'archive.gz'
 
         with gzip.open(str(archive), 'wb') as f:
             f.write(b'random content')
 
-        with pytest.raises(exceptions.DocumentLoadingError):
-            documents.load(archive)  # Not Unicode
+        with pytest.raises(exceptions.DocumentReadingError):
+            self.handler(archive).read()  # Not Unicode
 
 
 class TestArticleHandler(BaseDocumentHandlerTest):

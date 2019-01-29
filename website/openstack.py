@@ -1,5 +1,5 @@
 import logging
-from collections import abc
+from collections.abc import MutableMapping as AbstractMutableMapping
 from pathlib import Path
 from typing import Callable
 
@@ -14,7 +14,7 @@ class Container(_Container):
         return ObjectCollection(self._connection, self)
 
 
-class ObjectCollection(abc.MutableMapping):
+class ObjectCollection(AbstractMutableMapping):
     def __init__(self, connection: Callable, container: Container):
         self.connection = connection
         self.object_store = connection.object_store
