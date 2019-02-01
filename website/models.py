@@ -3,10 +3,12 @@
 from collections.abc import Iterable
 from typing import List, Optional
 
-import sqlalchemy
+import sqlalchemy.exc as sql_errors
+import sqlalchemy.orm.exc as orm_errors
 
 from website import db
-from website.exceptions import MultipleResultsFound
+from website.exceptions import (
+    ItemAlreadyExisting, ItemNotFound, MultipleItemsFound)
 
 
 class BaseModel(db.Model):
@@ -29,7 +31,7 @@ class BaseModel(db.Model):
         """
         query = cls.query
 
-        for key, value in kwargs:
+        for key, value in kwargs.items():
             column = getattr(cls, key)
 
             if isinstance(value, Iterable):
@@ -49,22 +51,32 @@ class BaseModel(db.Model):
             if several articles are found.
         """
         try:
-            return cls.query.filter_by(**kwargs).one_or_none()
-        except sqlalchemy.orm.exc.MultipleResultsFound:
-            raise MultipleResultsFound
+            return cls.query.filter_by(**kwargs).one()
+        except orm_errors.NoResultFound:
+            raise ItemNotFound
+        except orm_errors.MultipleResultsFound:
+            raise MultipleItemsFound
 
     # Instance Methods
 
     def delete(self) -> None:
         """Remove item from database."""
         db.session.delete(self)
+        db.session.flush()
 
     def save(self) -> None:
         """Save item into database."""
         db.session.add(self)
+
+        try:
+            db.session.flush()
+        except sql_errors.IntegrityError:
+            raise ItemAlreadyExisting(self)
 
 
 class Document(BaseModel):
     """Base class for all documents (.e.g., blog articles, notes, etc.)."""
 
     __abstract__ = True
+
+    uri = db.Column(db.String, unique=True, nullable=False)

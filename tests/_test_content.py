@@ -12,26 +12,44 @@ from website.content import BaseDocumentHandler
 class BaseDocumentHandlerTest(ABC):
     handler: BaseDocumentHandler = None  # Handler class to test
 
+    # Insert document.
+
     @abstractmethod
-    def test_insert_document(self):
+    def test_insert_document(self, db, fixtures, prompt):
         pass
 
     @abstractmethod
-    def test_update_document(self):
+    def test_insert_already_existing_document(self, db, fixtures):
+        pass
+
+    # Update document.
+
+    @abstractmethod
+    def test_update_document(self, db, fixtures, prompt):
         pass
 
     @abstractmethod
-    def test_rename_document(self):
+    def test_update_not_existing_document(self, db, fixtures):
+        pass
+
+    # Rename document.
+
+    @abstractmethod
+    def test_rename_document(self, db, fixtures, prompt):
+        pass
+
+    @abstractmethod
+    def test_rename_not_existing_document(self, db, fixtures):
         pass
 
     # Delete document.
 
     @abstractmethod
-    def test_delete_document(self):
+    def test_delete_document(self, db):
         pass
 
     @abstractmethod
-    def test_delete_not_existing_document(self):
+    def test_delete_not_existing_document(self, db):
         pass
 
     # Read document.

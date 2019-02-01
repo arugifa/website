@@ -5,9 +5,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Callable, Iterable, List, Mapping
+from typing import Callable, ClassVar, Iterable, List, Mapping
 
-from website.exceptions import DocumentReadingError
+from website.exceptions import (
+    ItemAlreadyExisting, ItemNotFound, DocumentReadingError)
 from website.models import Document
 
 logger = logging.getLogger(__name__)
@@ -153,44 +154,80 @@ class BaseDocumentHandler(ABC):
     reader: Callable = open
     prompt: Callable = input
 
-    @abstractmethod
+    model: ClassVar[Document]
+
     def insert(self) -> Document:
         """Insert a document into database.
 
-        :raise website.exceptions.DocumentAlreadyExists:
+        :raise website.exceptions.ItemAlreadyExisting:
             if a conflict happens during document insertion.
         """
+        return self.update(create=True)
 
-    @abstractmethod
-    def update(self) -> Document:
+    def update(self, uri: str = None, create: bool = False) -> Document:
         """Update a document in database.
 
-        :raise website.exceptions.DocumentNotFound:
-            if the document doesn't exist.
-        """
+        :param uri:
+            URI the document currently has in database.
+        :param create:
+            create the document if it doesn't exist yet in database.
+        :raise website.exceptions.ItemNotFound:
+            if the document cannot be found, and ``create`` is set to ``False``.
+        """  # noqa: E501
+        if create:
+            uri = self.parse_uri()
+            document = self.model(uri=uri)
 
-    @abstractmethod
+            if document.exists():
+                raise ItemAlreadyExisting(uri)
+
+        elif uri:  # Rename and update
+            document = self.model.find(uri=uri)  # Can raise ItemNotFound
+            document.uri = self.parse_uri()  # New URI
+            document.last_update = date.today()
+
+        else:  # Update only
+            uri = self.parse_uri()
+            document = self.model.find(uri=uri)  # Can raise ItemNotFound
+            document.last_update = date.today()
+
+        self.process(document)
+        document.save()
+
+        return document
+
     def rename(self, new_path: Path) -> Document:
-        """Rename a document in database.
+        """Rename (and update) a document in database.
 
-        :raise website.exceptions.DocumentNotFound:
+        :raise website.exceptions.ItemNotFound:
             if the document doesn't exist.
         """
+        # TODO: Set-up an HTTP redirection (01/2019)
+        uri = self.parse_uri()
+        handler = self.__class__(new_path, self.reader, self.prompt)
+        return handler.update(uri)
 
-    @abstractmethod
     def delete(self) -> None:
         """Remove a document from database.
 
-        :raise website.exceptions.DocumentNotFound:
+        :raise website.exceptions.ItemNotFound:
             if the document doesn't exist.
         """
+        uri = self.parse_uri()
+        document = self.model.find(uri=uri)  # Can raise ItemNotFound
+        document.delete()
 
     # Helpers
+
+    @abstractmethod
+    def process(self, document: Document) -> None:
+        """Prepare the document in order to save it in database later on."""
+        pass
 
     def read(self) -> str:
         """Read document's source file.
 
-        :param path: document's path.
+        :param path: file's path.
         """
         try:
             return self.reader(self.path).read()

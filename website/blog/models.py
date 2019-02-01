@@ -3,6 +3,8 @@
 from datetime import date
 from typing import Iterator
 
+from sqlalchemy import func
+
 from website import db
 from website.models import BaseModel, Document
 
@@ -22,8 +24,6 @@ class Article(Document):
     id = db.Column(db.Integer, primary_key=True)
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'))
 
-    uri = db.Column(db.String, unique=True, nullable=False)
-
     title = db.Column(db.String, nullable=False)
     introduction = db.Column(db.String, nullable=False)
     content = db.Column(db.Text, nullable=False)
@@ -32,7 +32,9 @@ class Article(Document):
     last_update = db.Column(db.Date)
 
     category = db.relationship('Category', back_populates='articles')
-    tags = db.relationship('Tag', secondary='article_tags', back_populates='articles')
+    tags = db.relationship(
+        'Tag', order_by='Tag.uri',
+        secondary='article_tags', back_populates='articles')
 
     @classmethod
     def latest_ones(cls) -> Iterator['Article']:
@@ -44,6 +46,12 @@ class Article(Document):
         - primary key in ascending order then.
         """
         return cls.query.order_by(cls.publication_date.desc(), cls.id.desc())
+
+    def exists(self) -> bool:
+        """Check if an article with the same :attr:`uri` already exists in database."""
+        # Thx to https://stackoverflow.com/a/41951905/2987526
+        article = Article.query.filter_by(uri=self.uri)
+        return db.session.query(article.exists()).scalar()
 
 
 class Category(BaseModel):
@@ -68,6 +76,15 @@ class Tag(BaseModel):
     uri = db.Column(db.String, unique=True, nullable=False)
     name = db.Column(db.String, nullable=False)
     articles = db.relationship('Article', secondary='article_tags', back_populates='tags')  # noqa: E501
+
+    @classmethod
+    def delete_orphans(cls) -> int:
+        """Delete tags not associated with any other documents in the databse.
+
+        :return: number of tags deleted.
+        """
+        # Thanks to https://stackoverflow.com/a/18193592/2987526
+        return db.session.query(Tag).having(func.count(Article.id) == 0).delete()
 
 
 # Many-to-Many Relationships

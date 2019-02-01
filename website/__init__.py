@@ -7,7 +7,10 @@ from werkzeug.datastructures import ImmutableDict
 
 from .config import IN_MEMORY_DATABASE
 
-db = SQLAlchemy()
+# Disable autoflush to have more control over objects creation.
+# Otherwise, when querying the database, SQLAlchemy can tries at the same time
+# to flush uncompleted objects, which can then raises integrity errors.
+db = SQLAlchemy(session_options={"autoflush": False})
 website = Blueprint('website', __name__)
 
 

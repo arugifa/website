@@ -11,15 +11,15 @@ class DatabaseException(WebsiteException):
     """Errors related to the database."""
 
 
-class MultipleResultsFound(DatabaseException):
+class MultipleItemsFound(DatabaseException):
     """Raised if several results are returned when looking for a specific item."""  # noqa: E501
 
 
-class DocumentNotFound(DatabaseException):
+class ItemNotFound(DatabaseException):
     pass
 
 
-class DocumentAlreadyExists(DatabaseException):
+class ItemAlreadyExisting(DatabaseException):
     pass
 
 

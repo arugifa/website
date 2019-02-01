@@ -1,5 +1,6 @@
 import re
 import shlex
+from pathlib import Path
 from subprocess import PIPE, run
 
 import pytest
@@ -12,9 +13,10 @@ from website.config import TestingConfig
 from website.factories import BaseCloudFactory
 from website.stubs import CloudConnectionStub
 from website.test.integration import (
-    CommandLine, InvokeStub, RunReal, RunStub)
+    CommandLine, FileFixtureCollection, InvokeStub, Prompt, RunReal, RunStub)
 from website.test.pytest import FixtureMarker
 
+here = Path(__file__).parent.resolve()
 integration_test = FixtureMarker()
 
 
@@ -111,10 +113,21 @@ def invoke_ctx():
     return InvokeStub()
 
 
+@pytest.fixture()
+def fixtures(tmp_path):
+    directory = here / '_fixtures'
+    return FileFixtureCollection(directory, tmp_path)
+
+
 @pytest.fixture(params=[RunStub, RunReal])
 @integration_test
 def git(request):
     return request.param()
+
+
+@pytest.fixture
+def prompt():
+    return Prompt()
 
 
 @pytest.fixture(scope='session')

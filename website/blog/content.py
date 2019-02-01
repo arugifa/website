@@ -8,51 +8,36 @@ from bs4 import BeautifulSoup
 
 from website.blog.models import Article, Category, Tag
 from website.content import BaseDocumentHandler
-from website.exceptions import DocumentNotFound
+from website.exceptions import ItemNotFound
 
 
 class ArticleHandler(BaseDocumentHandler):
     """Manage articles life cycle."""
+    model = Article
 
-    def insert(self) -> Article:
-        """Insert an article into database."""
-        uri = self.parse_uri()
-        date = self.parse_date()
+    def delete(self) -> None:
+        """Delete an article from database, and clean orphan tags.
 
+        :raise website.exceptions.ItemNotFound:
+            if the article doesn't exist.
+        """
+        super().delete()  # Can raise ItemNotFound
+        Tag.delete_orphans()
+
+    def process(self, article: Article) -> Article:
+        """Update an article in database.
+
+        :param create:
+            create the article if it doesn't exist yet in database.
+        :raise website.exceptions.ItemNotFound:
+            if the article cannot be found, and ``create`` is set to ``False``.
+        """
         source = self.read()
-        html = BeautifulSoup(source, 'html.parser')
-
-        title = self.parse_title(html)
-        introduction = self.parse_introduction(html)
-        content = self.parse_content(html)
-
-        category_uri = self.parse_category(html)
-        category = self.insert_category(category_uri)
-
-        tag_uris = self.parse_tags(html)
-        tags = self.insert_tags(tag_uris)
-
-        article = Article(
-            uri=uri, title=title,
-            introduction=introduction, content=content,
-            category=category, tags=tags,
-            publication_date=date,
-        )
-        article.save()
-
-        return article
-
-    def update(self) -> Article:
-        """Update an article in database."""
-        uri = self.parse_uri(self.path)
-        article = Article.find(uri=uri)
-
-        source = self.read(self.path)
         html = BeautifulSoup(source, 'html.parser')
 
         article.title = self.parse_title(html)
         article.introduction = self.parse_introduction(html)
-        article.content = self.parse_content(html)
+        article.content = self.get_content(html)
 
         category_uri = self.parse_category(html)
         article.category = self.insert_category(category_uri)
@@ -60,64 +45,44 @@ class ArticleHandler(BaseDocumentHandler):
         tag_uris = self.parse_tags(html)
         article.tags = self.insert_tags(tag_uris)
 
-        article.last_update = date.today()
-
         return article
-
-    def rename(self, new_path: Path) -> Article:
-        """Rename an article in database."""
-        # TODO: Set an HTTP redirection (01/2019)
-        previous_uri = self.parse_uri()
-        article = Article.find(uri=previous_uri)
-
-        self.path = new_path
-        new_uri = self.parse_uri()
-        article.uri = new_uri
-
-        return self.update()
-
-    def delete(self) -> None:
-        """Delete an article from database.
-
-        :raise website.exceptions.DocumentNotFound:
-            if the article doesn't exist.
-        """
-        uri = self.parse_uri()
-        article = Article.find(uri=uri)
-
-        try:
-            article.delete()
-        except AttributeError:
-            raise DocumentNotFound(uri)
 
     # Helpers
 
     def insert_category(self, uri: str) -> Category:
         """Create the article's category, if it doesn't exist yet."""
-        category = Category.find(uri=uri)
-
-        if not category:
-            name = self.prompt(
-                f'Please enter a name for the new "{uri}" category: ')
-            category = Category(name=name, uri=uri)
+        try:
+            category = Category.find(uri=uri)
+        except ItemNotFound:
+            name = self.prompt(f'Please enter a name for the new "{uri}" category: ')
+            category = Category(uri=uri, name=name)
             category.save()
 
         return category
 
     def insert_tags(self, uris: Iterable[str]) -> List[Tag]:
         """Create the article's tags, if they don't exist yet."""
-        tags = Tag.filter(uri=uris).all()
+        tags = Tag.filter(uri=uris)
 
         existing = set([tag.uri for tag in tags])
         new = set(uris) - existing
 
         for uri in new:
-            name = self.prompt('Please enter a name for the new "{uri}" tag: ')
+            name = self.prompt(f'Please enter a name for the new "{uri}" tag: ')
             tag = Tag(name=name, uri=uri)
             tag.save()
             tags.append(tag)
 
-        return tags
+        return sorted(tags, key=lambda t: t.uri)
+
+    @staticmethod
+    def get_content(html: BeautifulSoup) -> Optional[str]:
+        """Search the content of an article, inside its HTML source."""
+        # TODO: Return only article's body, not the whole content (01/2019)
+        try:
+            return ''.join(str(child) for child in html.body.find_all())
+        except AttributeError:
+            return None
 
     @staticmethod
     def parse_category(html: BeautifulSoup) -> Optional[str]:
@@ -125,14 +90,6 @@ class ArticleHandler(BaseDocumentHandler):
         try:
             return html.head.select_one('meta[name=description]')['content']
         except (KeyError, TypeError):
-            return None
-
-    @staticmethod
-    def parse_content(html: BeautifulSoup) -> Optional[str]:
-        """Search the content of an article, inside its HTML source."""
-        try:
-            return ''.join(str(child) for child in html.body.find_all())
-        except AttributeError:
             return None
 
     @staticmethod
