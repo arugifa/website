@@ -25,11 +25,20 @@ class AsciidoctorToHTMLConverter(BaseDocumentReader):
 
     def read(self) -> str:
         """Read file located at :attr:`path`, using Asciidoctor."""
+        """
         cmdline = (
             'asciidoctor '
             '--no-header-footer '
             '-a showtitle=true '
             '--out-file - '
             f'{self.path}')
+        """
 
+        cmdline = (
+            f'asciidoctor '
+            # Don't use a stylesheet and deactivate warnings.
+            f'-q -a stylesheet=missing.css '
+            # Print the output on stdout.
+            f'--out-file - {self.path}'
+        )
         return self.run(cmdline).stdout

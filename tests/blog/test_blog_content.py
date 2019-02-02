@@ -1,5 +1,5 @@
 from datetime import date
-from pathlib import Path, PurePath
+from pathlib import PurePath
 
 import pytest
 
@@ -37,13 +37,20 @@ class TestArticleHandler(BaseDocumentHandlerTest):
 
     def assert_article_has_been_saved(self, article):
         assert article.title == "House Music Spirit"
-        assert article.introduction == "How House Music could save the world?"
-        assert article.content == (
-            '<h1>House Music Spirit</h1>'
-            '<p id="preamble">How House Music could save the world?</p>'
-            '<p>Just move your body.</p>'
-            '<p>Feel the vibes...</p>'
-            '<p>And never stop to dance!</p>'
+        assert article.lead == "How House Music could save the world?"
+        assert article.body == (
+            '<div class="sect1">\n'
+            '<h2 id="_tutorial">Tutorial</h2>\n'
+            '<div class="sectionbody">\n'
+            '<div class="paragraph">\n'
+            '<p>Just move your body.</p>\n'
+            '</div>\n</div>\n</div>\n'
+            '<div class="sect1">\n'
+            '<h2 id="_thats_it">That’s it?</h2>\n'
+            '<div class="sectionbody">\n'
+            '<div class="paragraph">\n'
+            '<p>Feel the vibes…\u200b\nAnd never stop to dance!</p>\n'
+            '</div>\n</div>\n</div>\n'
         )
 
         assert article.category.uri == "music"
@@ -67,7 +74,7 @@ class TestArticleHandler(BaseDocumentHandlerTest):
     def test_update_document(self, answers, db, document, prompt):
         original = ArticleFactory(
             uri='update', title="To Update",
-            introduction="To be updated.", content="Please update me!",
+            lead="To be updated.", body="Please update me!",
         )
         assert original.last_update is None
 
@@ -90,7 +97,7 @@ class TestArticleHandler(BaseDocumentHandlerTest):
     def test_rename_document(self, answers, db, document, prompt):
         original = ArticleFactory(
             uri='rename', title="To Rename",
-            introduction="To be renamed.", content="Please rename me!",
+            lead="To be renamed.", body="Please rename me!",
         )
         assert original.last_update is None
 
@@ -166,16 +173,98 @@ class TestArticleSourceParser(BaseDocumentSourceParserTest):
         article = fixtures['blog/article.html'].open().read()
         return self.parser(article)
 
-    @pytest.fixture(scope='class')
-    def empty_source(self):
-        return self.parser('<html></html>')
-
-    # Find category.
+    # Parse category.
 
     def test_parse_category(self, source):
         category = source.parse_category()
         assert category == 'music'
 
-    def test_parse_not_defined_category(self, empty_source):
-        with pytest.raises(exceptions.CategoryNotDefined):
-            empty_source.parse_category()
+    @pytest.mark.parametrize('source', [
+        '<html></html>',
+        '<html><head><meta name="description"></head></html>',
+    ])
+    def test_parse_missing_category(self, source):
+        with pytest.raises(exceptions.ArticleCategoryMissing):
+            self.parser(source).parse_category()
+
+    # Parse title.
+
+    def test_parse_title(self, source):
+        title = source.parse_title()
+        assert title == 'House Music Spirit'
+
+    @pytest.mark.parametrize('source', [
+        '<html></html>',
+        '<html><title></title></html>',
+    ])
+    def test_parse_missing_title(self, source):
+        with pytest.raises(exceptions.ArticleTitleMissing):
+            self.parser(source).parse_title()
+
+    # Parse lead.
+
+    def test_parse_lead(self, source):
+        lead = source.parse_lead()
+        assert lead == "How House Music could save the world?"
+
+    @pytest.mark.parametrize('content', [
+        '<div id="preamble"></div>',
+        '<div id="preamble"><p></p></div>',
+    ])
+    def test_parse_missing_lead(self, content):
+        source = f'<html><body><div id="content">{content}</div></body></html>'
+        with pytest.raises(exceptions.ArticleLeadMissing):
+            self.parser(source).parse_lead()
+
+    def test_parse_lead_with_many_paragraphs(self):
+        source = (
+            '<html><body><div id="content"><div id="preamble">'
+            '<p>Paragraph 1</p>'
+            '<p>Paragraph 2</p>'
+            '</div></div></body></html>'
+        )
+        with pytest.raises(exceptions.ArticleLeadMalformatted):
+            self.parser(source).parse_lead()
+
+    def test_parse_lead_with_new_lines(self):
+        source = (
+            '<html><body><div id="content">'
+            '<div id="preamble"><p>Not enough\nspace?</p></div>'
+            '</div></body></html>'
+        )
+        lead = self.parser(source).parse_lead()
+        assert lead == "Not enough space?"
+
+    def test_parse_lead_surrounded_by_new_lines_and_tabulations(self):
+        source = (
+            '<html><body><div id="content">'
+            '<div id="preamble">\n\t<p>\n\t\tLead\n\t\t</p>\n\t</div>'
+            '</div></body></html>'
+        )
+        lead = self.parser(source).parse_lead()
+        assert lead == "Lead"
+
+    # Parse body.
+
+    def test_parse_body(self, source):
+        actual = source.parse_body()
+        expected = (
+            '<div class="sect1">\n'
+            '<h2 id="_tutorial">Tutorial</h2>\n'
+            '<div class="sectionbody">\n'
+            '<div class="paragraph">\n'
+            '<p>Just move your body.</p>\n'
+            '</div>\n</div>\n</div>\n'
+            '<div class="sect1">\n'
+            '<h2 id="_thats_it">That’s it?</h2>\n'
+            '<div class="sectionbody">\n'
+            '<div class="paragraph">\n'
+            '<p>Feel the vibes…\u200b\nAnd never stop to dance!</p>\n'
+            '</div>\n</div>\n</div>\n'
+        )
+        assert actual == expected
+
+    def test_parse_missing_body(self):
+        source = f'<html><body><div id="content"></div></body></html>'
+        with pytest.raises(exceptions.ArticleBodyMissing):
+            self.parser(source).parse_body()

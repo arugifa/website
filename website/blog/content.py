@@ -1,26 +1,30 @@
 """Content management of my blog."""
 
 import logging
+import re
 from datetime import date
-from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Iterable, List
 
-from bs4 import BeautifulSoup
+import lxml.etree
 from lxml.cssselect import CSSSelector
-from lxml.html import HtmlElement
 
+from website import exceptions
 from website.blog.models import Article, Category, Tag
 from website.content import BaseDocumentHandler, BaseDocumentSourceParser
-from website.exceptions import CategoryNotDefined, ItemNotFound
 
 logger = logging.getLogger(__name__)
 
 
 class ArticleSourceParser(BaseDocumentSourceParser):
+    """...
+
+    See https://asciidoctor.org/docs/user-manual/
+    """
+
     def parse_category(self) -> str:
         """Search the category of an article in its HTML source.
 
-        :raise website.exceptions.CategoryNotDefined:
+        :raise website.exceptions.ArticleCategoryMissing:
             when no category is found.
         """
         parser = CSSSelector('html head meta[name=description]')
@@ -29,38 +33,67 @@ class ArticleSourceParser(BaseDocumentSourceParser):
             category = parser(self.source)[0].get('content')
             assert category is not None
         except (AssertionError, IndexError):
-            raise CategoryNotDefined
+            raise exceptions.ArticleCategoryMissing
 
         return category
 
-    # To implement
-    def parse_content(self) -> Optional[str]:
-        """Search the content of an article, inside its HTML source."""
-        # TODO: Return only article's body, not the whole content (01/2019)
-        html = BeautifulSoup(self._source, 'html.parser')
+    def parse_title(self) -> str:
+        """Search the title of an article, inside its HTML source.
+
+        :raise website.exceptions.ArticleTitleMissing: when no title is found.
+        """
+        parser = CSSSelector('html head title')
 
         try:
-            return ''.join(str(child) for child in html.body.find_all())
-        except AttributeError:
-            return None
+            title = parser(self.source)[0].text_content()
+            assert title
+        except (AssertionError, IndexError):
+            raise exceptions.ArticleTitleMissing
 
-    def parse_introduction(self) -> Optional[str]:
-        """Search the introduction of an article, inside its HTML source."""
-        html = BeautifulSoup(self._source, 'html.parser')
+        return title
+
+    def parse_lead(self) -> str:
+        """Search the lead of an article, inside its HTML source.
+
+        :raise website.exceptions.ArticleLeadMissing:
+            when no lead is found.
+        :raise website.exceptions.ArticleLeadMalformatted:
+            when the lead contains many paragraphs.
+        """
+        parser = CSSSelector('html body div#content div#preamble p')
+        lead = parser(self.source)
 
         try:
-            return html.body.select_one('#preamble').text.strip()
-        except AttributeError:
-            return None
-
-    def parse_title(self) -> Optional[str]:
-        """Search the title of an article, inside its HTML source."""
-        html = BeautifulSoup(self._source, 'html.parser')
+            assert len(lead) < 2
+        except AssertionError:
+            raise exceptions.ArticleLeadMalformatted
 
         try:
-            return html.body.select_one('h1').text
-        except AttributeError:
-            return None
+            lead = lead[0].text_content().strip()
+            lead = re.sub(r'\s+', r' ', lead)
+            assert lead
+        except (AssertionError, IndexError):
+            raise exceptions.ArticleLeadMissing
+
+        return lead
+
+    def parse_body(self) -> str:
+        """Search the content of an article, inside its HTML source.
+
+        :raise website.exceptions.ArticleBodyMissing:
+            when no body is found.
+        """
+        parser = CSSSelector('html body div#content div.sect1')
+        body = parser(self.source)
+
+        try:
+            assert body
+        except AssertionError:
+            raise exceptions.ArticleBodyMissing
+
+        body = ''.join(lxml.etree.tounicode(section) for section in body)
+
+        return body
 
 
 class ArticleHandler(BaseDocumentHandler):
@@ -91,8 +124,8 @@ class ArticleHandler(BaseDocumentHandler):
         """
         with self.load() as source:
             article.title = source.parse_title()
-            article.introduction = source.parse_introduction()
-            article.content = source.parse_content()
+            article.lead = source.parse_lead()
+            article.body = source.parse_body()
 
             category_uri = source.parse_category()
             tag_uris = source.parse_tags()
@@ -106,7 +139,7 @@ class ArticleHandler(BaseDocumentHandler):
         """Create the article's category, if it doesn't exist yet."""
         try:
             category = Category.find(uri=uri)
-        except ItemNotFound:
+        except exceptions.ItemNotFound:
             name = self.prompt(f'Please enter a name for the new "{uri}" category: ')
             category = Category(uri=uri, name=name)
             category.save()

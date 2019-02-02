@@ -8,6 +8,7 @@ from datetime import date
 from pathlib import Path, PurePath
 from typing import Callable, ClassVar, Iterable, List, Mapping, Union
 
+import lxml.etree
 import lxml.html
 from bs4 import BeautifulSoup
 
@@ -252,7 +253,11 @@ class BaseDocumentHandler(ABC):
 class BaseDocumentSourceParser(AbstractContextManager):
     def __init__(self, source: str):
         self._source = source
-        self.source = lxml.html.document_fromstring(source)
+
+        try:
+            self.source = lxml.html.document_fromstring(source)
+        except lxml.etree.ParserError:
+            pass
 
     def __exit__(self, *args, **kwargs):
         return super().__exit__(*args, **kwargs)

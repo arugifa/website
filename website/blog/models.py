@@ -25,8 +25,8 @@ class Article(Document):
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'))
 
     title = db.Column(db.String, nullable=False)
-    introduction = db.Column(db.String, nullable=False)
-    content = db.Column(db.Text, nullable=False)
+    lead = db.Column(db.String, nullable=False)
+    body = db.Column(db.Text, nullable=False)
 
     publication_date = db.Column(db.Date, default=date.today, nullable=False)
     last_update = db.Column(db.Date)

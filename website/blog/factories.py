@@ -15,8 +15,8 @@ class ArticleFactory(BaseDatabaseFactory):
     uri = Sequence(lambda n: f'article_{n}')
 
     title = Sequence(lambda n: f"Article {n}")
-    introduction = "This is the article's introduction."
-    content = "<p>This is the article's content.</p>"
+    lead = "Grab reader's attention."
+    body = "<p>This is the article's content.</p>"
 
     publication_date = LazyFunction(date.today)
     last_update = None

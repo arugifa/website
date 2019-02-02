@@ -29,7 +29,27 @@ class DocumentError(WebsiteException):
     pass
 
 
-class CategoryNotDefined(DocumentError):
+class DocumentParsingError(DocumentError):
+    pass
+
+
+class ArticleCategoryMissing(DocumentParsingError):
+    pass
+
+
+class ArticleTitleMissing(DocumentParsingError):
+    pass
+
+
+class ArticleLeadMissing(DocumentParsingError):
+    pass
+
+
+class ArticleLeadMalformatted(DocumentParsingError):
+    pass
+
+
+class ArticleBodyMissing(DocumentParsingError):
     pass
 
 
