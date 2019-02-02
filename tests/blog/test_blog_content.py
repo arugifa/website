@@ -141,7 +141,7 @@ class TestArticleHandler(BaseDocumentHandlerTest):
         self.handler(document).delete()
         assert Tag.all() == []
 
-    # Parse date.
+    # Scan date.
 
     def test_scan_date(self):
         path = PurePath('blog/2018/08-04.date.html')
@@ -170,8 +170,8 @@ class TestArticleSourceParser(BaseDocumentSourceParserTest):
 
     @pytest.fixture(scope='class')
     def source(self, fixtures):
-        article = fixtures['blog/article.html'].open().read()
-        return self.parser(article)
+        document = fixtures['blog/article.html'].open().read()
+        return self.parser(document)
 
     # Parse category.
 
@@ -179,13 +179,13 @@ class TestArticleSourceParser(BaseDocumentSourceParserTest):
         category = source.parse_category()
         assert category == 'music'
 
-    @pytest.mark.parametrize('source', [
-        '<html></html>',
+    @pytest.mark.parametrize('html', [
+        '<html><head></head></html>',
         '<html><head><meta name="description"></head></html>',
     ])
-    def test_parse_missing_category(self, source):
+    def test_parse_missing_category(self, html):
         with pytest.raises(exceptions.ArticleCategoryMissing):
-            self.parser(source).parse_category()
+            self.parser(html).parse_category()
 
     # Parse title.
 
@@ -193,13 +193,13 @@ class TestArticleSourceParser(BaseDocumentSourceParserTest):
         title = source.parse_title()
         assert title == 'House Music Spirit'
 
-    @pytest.mark.parametrize('source', [
+    @pytest.mark.parametrize('html', [
         '<html></html>',
         '<html><title></title></html>',
     ])
-    def test_parse_missing_title(self, source):
+    def test_parse_missing_title(self, html):
         with pytest.raises(exceptions.ArticleTitleMissing):
-            self.parser(source).parse_title()
+            self.parser(html).parse_title()
 
     # Parse lead.
 
@@ -212,36 +212,36 @@ class TestArticleSourceParser(BaseDocumentSourceParserTest):
         '<div id="preamble"><p></p></div>',
     ])
     def test_parse_missing_lead(self, content):
-        source = f'<html><body><div id="content">{content}</div></body></html>'
+        html = f'<html><body><div id="content">{content}</div></body></html>'
         with pytest.raises(exceptions.ArticleLeadMissing):
-            self.parser(source).parse_lead()
+            self.parser(html).parse_lead()
 
     def test_parse_lead_with_many_paragraphs(self):
-        source = (
+        html = (
             '<html><body><div id="content"><div id="preamble">'
             '<p>Paragraph 1</p>'
             '<p>Paragraph 2</p>'
             '</div></div></body></html>'
         )
         with pytest.raises(exceptions.ArticleLeadMalformatted):
-            self.parser(source).parse_lead()
+            self.parser(html).parse_lead()
 
     def test_parse_lead_with_new_lines(self):
-        source = (
+        html = (
             '<html><body><div id="content">'
             '<div id="preamble"><p>Not enough\nspace?</p></div>'
             '</div></body></html>'
         )
-        lead = self.parser(source).parse_lead()
+        lead = self.parser(html).parse_lead()
         assert lead == "Not enough space?"
 
     def test_parse_lead_surrounded_by_new_lines_and_tabulations(self):
-        source = (
+        html = (
             '<html><body><div id="content">'
             '<div id="preamble">\n\t<p>\n\t\tLead\n\t\t</p>\n\t</div>'
             '</div></body></html>'
         )
-        lead = self.parser(source).parse_lead()
+        lead = self.parser(html).parse_lead()
         assert lead == "Lead"
 
     # Parse body.
@@ -265,6 +265,6 @@ class TestArticleSourceParser(BaseDocumentSourceParserTest):
         assert actual == expected
 
     def test_parse_missing_body(self):
-        source = f'<html><body><div id="content"></div></body></html>'
+        html = f'<html><body><div id="content"></div></body></html>'
         with pytest.raises(exceptions.ArticleBodyMissing):
-            self.parser(source).parse_body()
+            self.parser(html).parse_body()

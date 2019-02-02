@@ -10,7 +10,7 @@ from typing import Callable, ClassVar, Iterable, List, Mapping, Union
 
 import lxml.etree
 import lxml.html
-from bs4 import BeautifulSoup
+from lxml.cssselect import CSSSelector
 
 from website.exceptions import (
     ItemAlreadyExisting, ItemNotFound, DocumentLoadingError)
@@ -264,14 +264,16 @@ class BaseDocumentSourceParser(AbstractContextManager):
 
     def parse_tags(self) -> List[str]:
         """Search the tags of an article, inside its HTML source."""
-        html = BeautifulSoup(self._source, 'html.parser')
+        parser = CSSSelector('html head meta[name=keywords]')
 
         try:
-            tags = html.head.select_one('meta[name=keywords]')['content']
-        except (KeyError, TypeError):
-            return list()
+            tags = parser(self.source)[0].get('content', '')
+            tags = [tag.strip() for tag in tags.split(',')]
+            assert all(tags)
+        except (AssertionError, IndexError):
+            return []
 
-        return tags.split(', ')
+        return tags
 
 
 @dataclass

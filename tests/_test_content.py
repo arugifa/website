@@ -2,6 +2,7 @@ import gzip
 from abc import ABC, abstractmethod
 from datetime import date
 from pathlib import PurePath
+from typing import ClassVar
 
 import pytest
 
@@ -10,7 +11,7 @@ from website.content import BaseDocumentHandler, BaseDocumentSourceParser
 
 
 class BaseDocumentHandlerTest(ABC):
-    handler: BaseDocumentHandler = None  # Handler class to test
+    handler: ClassVar[BaseDocumentHandler] = None  # Handler class to test
 
     # Insert document.
 
@@ -83,13 +84,55 @@ class BaseDocumentHandlerTest(ABC):
         with pytest.raises(exceptions.DocumentLoadingError):
             self.handler(archive).load()
 
-    # Parse URI.
+    # Scan URI.
 
-    def test_parse_document_uri(self):
+    def test_scan_uri(self):
         path = PurePath('document.html')
         actual = self.handler(path).scan_uri()
         assert actual == 'document'
 
 
-class BaseDocumentSourceParserTest(ABC):
-    parser: BaseDocumentSourceParser = None  # Handler class to test
+class BaseDocumentSourceParserTest:
+    parser: ClassVar[BaseDocumentSourceParser] = None  # Handler class to test
+
+    @pytest.fixture(scope='class')
+    def base_source(self, fixtures):
+        document = fixtures['document.html'].open().read()
+        return self.parser(document)
+
+    # Parse tags.
+
+    def test_parse_tags(self, base_source):
+        tags = base_source.parse_tags()
+        assert tags == ['asciidoctor', 'tests']
+
+    @pytest.mark.parametrize('html', [
+        '<html><head></head></html>',
+        '<html><head><meta name="keywords"></head></html>',
+    ])
+    def test_parse_missing_tags(self, html):
+        tags = self.parser(html).parse_tags()
+        assert tags == []
+
+    def test_parse_empty_tags(self):
+        html = '<html><head><meta name="keywords" content=",,"></head></html>'
+        tags = self.parser(html).parse_tags()
+        assert tags == []
+
+    def test_parse_tags_surrounded_by_spaces(self):
+        html = (
+            '<html><head>'
+            '<meta name="keywords" content="tag1, tag2 , tag3">'
+            '</head></html>'
+        )
+        tags = self.parser(html).parse_tags()
+        assert tags == ['tag1', 'tag2', 'tag3']
+
+    def test_parse_tags_not_surrounded_by_spaces(self):
+        html = (
+            '<html><head>'
+            '<meta name="keywords" content="tag1,tag2,tag3">'
+            '</head></html>'
+        )
+        tags = self.parser(html).parse_tags()
+        assert tags == ['tag1', 'tag2', 'tag3']
