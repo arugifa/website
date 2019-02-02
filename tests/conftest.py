@@ -113,10 +113,11 @@ def invoke_ctx():
     return InvokeStub()
 
 
-@pytest.fixture()
-def fixtures(tmp_path):
+@pytest.fixture(scope='session')
+def fixtures(request, tmp_path_factory):
     directory = here / '_fixtures'
-    return FileFixtureCollection(directory, tmp_path)
+    symlinks = tmp_path_factory.mktemp('fixtures')
+    return FileFixtureCollection(directory, request, symlinks)
 
 
 @pytest.fixture(params=[RunStub, RunReal])

@@ -2,13 +2,17 @@
 
 import logging
 from abc import ABC, abstractmethod
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from datetime import date
-from pathlib import Path
-from typing import Callable, ClassVar, Iterable, List, Mapping
+from pathlib import Path, PurePath
+from typing import Callable, ClassVar, Iterable, List, Mapping, Union
+
+import lxml.html
+from bs4 import BeautifulSoup
 
 from website.exceptions import (
-    ItemAlreadyExisting, ItemNotFound, DocumentReadingError)
+    ItemAlreadyExisting, ItemNotFound, DocumentLoadingError)
 from website.models import Document
 
 logger = logging.getLogger(__name__)
@@ -150,11 +154,14 @@ class BaseDocumentHandler(ABC):
         function to interactively ask questions during documents import,
         when certain things cannot be completely done automatically.
     """
-    path: str
+    path: Union[Path, PurePath]
     reader: Callable = open
     prompt: Callable = input
 
     model: ClassVar[Document]
+    parser: ClassVar['BaseDocumentSourceParser']
+
+    # Main API
 
     def insert(self) -> Document:
         """Insert a document into database.
@@ -175,7 +182,7 @@ class BaseDocumentHandler(ABC):
             if the document cannot be found, and ``create`` is set to ``False``.
         """  # noqa: E501
         if create:
-            uri = self.parse_uri()
+            uri = self.scan_uri()
             document = self.model(uri=uri)
 
             if document.exists():
@@ -183,11 +190,11 @@ class BaseDocumentHandler(ABC):
 
         elif uri:  # Rename and update
             document = self.model.find(uri=uri)  # Can raise ItemNotFound
-            document.uri = self.parse_uri()  # New URI
+            document.uri = self.scan_uri()  # New URI
             document.last_update = date.today()
 
         else:  # Update only
-            uri = self.parse_uri()
+            uri = self.scan_uri()
             document = self.model.find(uri=uri)  # Can raise ItemNotFound
             document.last_update = date.today()
 
@@ -203,7 +210,7 @@ class BaseDocumentHandler(ABC):
             if the document doesn't exist.
         """
         # TODO: Set-up an HTTP redirection (01/2019)
-        uri = self.parse_uri()
+        uri = self.scan_uri()
         handler = self.__class__(new_path, self.reader, self.prompt)
         return handler.update(uri)
 
@@ -213,44 +220,53 @@ class BaseDocumentHandler(ABC):
         :raise website.exceptions.ItemNotFound:
             if the document doesn't exist.
         """
-        uri = self.parse_uri()
+        uri = self.scan_uri()
         document = self.model.find(uri=uri)  # Can raise ItemNotFound
         document.delete()
 
     # Helpers
+
+    def load(self):
+        try:
+            with self.reader(self.path) as f:
+                source = f.read()
+        except (OSError, UnicodeDecodeError) as exc:
+            error = "Unable to read %s: %s"
+            logger.error(error, self.path, exc)
+            raise DocumentLoadingError(error % (self.path, exc))
+
+        return self.parser(source)
 
     @abstractmethod
     def process(self, document: Document) -> None:
         """Prepare the document in order to save it in database later on."""
         pass
 
-    def read(self) -> str:
-        """Read document's source file.
+    # Path Scanners
 
-        :param path: file's path.
-        """
-        try:
-            return self.reader(self.path).read()
-        except (OSError, UnicodeDecodeError) as exc:
-            error = "Unable to read %s: %s"
-            logger.error(error, self.path, exc)
-            raise DocumentReadingError(error % (self.path, exc))
-
-    def parse_date(self) -> date:
-        """Return the creation date of a document, based on its :attr:`path`."""  # noqa: E501
-        try:
-            year = int(self.path.parents[0].name)
-            month, day = map(int, self.path.name.split('.')[0].split('-'))
-        except (IndexError, TypeError):
-            error = 'Path "%s" does not contain a proper date'
-            logger.error(error, self.path)
-            raise ValueError(error % self.path)
-
-        return date(year, month, day)
-
-    def parse_uri(self) -> str:
+    def scan_uri(self) -> str:
         """Return the URI of a document, based on its :attr:`path`."""
         return self.path.stem.split('.')[-1]
+
+
+class BaseDocumentSourceParser(AbstractContextManager):
+    def __init__(self, source: str):
+        self._source = source
+        self.source = lxml.html.document_fromstring(source)
+
+    def __exit__(self, *args, **kwargs):
+        return super().__exit__(*args, **kwargs)
+
+    def parse_tags(self) -> List[str]:
+        """Search the tags of an article, inside its HTML source."""
+        html = BeautifulSoup(self._source, 'html.parser')
+
+        try:
+            tags = html.head.select_one('meta[name=keywords]')['content']
+        except (KeyError, TypeError):
+            return list()
+
+        return tags.split(', ')
 
 
 @dataclass
@@ -259,14 +275,17 @@ class BaseDocumentReader(ABC):
     #: Initialized when calling a reader instance later on.
     path: Path = None
 
+    @contextmanager
     def __call__(self, path: Path):
         """Prepare the reader for further reading."""
         self.path = path
-        return self
+        yield self
 
     @abstractmethod
     def read(self) -> str:
         """Effectively read the document located at :attr:`path`.
+
+        The returned string must be in HTML format.
 
         :raise OSError: when cannot open the document.
         :raise UnicodeDecodeError: when cannot read the document's content.

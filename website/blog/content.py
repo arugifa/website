@@ -1,19 +1,74 @@
 """Content management of my blog."""
 
+import logging
 from datetime import date
 from pathlib import Path
 from typing import Iterable, List, Optional
 
 from bs4 import BeautifulSoup
+from lxml.cssselect import CSSSelector
+from lxml.html import HtmlElement
 
 from website.blog.models import Article, Category, Tag
-from website.content import BaseDocumentHandler
-from website.exceptions import ItemNotFound
+from website.content import BaseDocumentHandler, BaseDocumentSourceParser
+from website.exceptions import CategoryNotDefined, ItemNotFound
+
+logger = logging.getLogger(__name__)
+
+
+class ArticleSourceParser(BaseDocumentSourceParser):
+    def parse_category(self) -> str:
+        """Search the category of an article in its HTML source.
+
+        :raise website.exceptions.CategoryNotDefined:
+            when no category is found.
+        """
+        parser = CSSSelector('html head meta[name=description]')
+
+        try:
+            category = parser(self.source)[0].get('content')
+            assert category is not None
+        except (AssertionError, IndexError):
+            raise CategoryNotDefined
+
+        return category
+
+    # To implement
+    def parse_content(self) -> Optional[str]:
+        """Search the content of an article, inside its HTML source."""
+        # TODO: Return only article's body, not the whole content (01/2019)
+        html = BeautifulSoup(self._source, 'html.parser')
+
+        try:
+            return ''.join(str(child) for child in html.body.find_all())
+        except AttributeError:
+            return None
+
+    def parse_introduction(self) -> Optional[str]:
+        """Search the introduction of an article, inside its HTML source."""
+        html = BeautifulSoup(self._source, 'html.parser')
+
+        try:
+            return html.body.select_one('#preamble').text.strip()
+        except AttributeError:
+            return None
+
+    def parse_title(self) -> Optional[str]:
+        """Search the title of an article, inside its HTML source."""
+        html = BeautifulSoup(self._source, 'html.parser')
+
+        try:
+            return html.body.select_one('h1').text
+        except AttributeError:
+            return None
 
 
 class ArticleHandler(BaseDocumentHandler):
     """Manage articles life cycle."""
     model = Article
+    parser = ArticleSourceParser
+
+    # Main API
 
     def delete(self) -> None:
         """Delete an article from database, and clean orphan tags.
@@ -24,6 +79,8 @@ class ArticleHandler(BaseDocumentHandler):
         super().delete()  # Can raise ItemNotFound
         Tag.delete_orphans()
 
+    # Helpers
+
     def process(self, article: Article) -> Article:
         """Update an article in database.
 
@@ -32,22 +89,18 @@ class ArticleHandler(BaseDocumentHandler):
         :raise website.exceptions.ItemNotFound:
             if the article cannot be found, and ``create`` is set to ``False``.
         """
-        source = self.read()
-        html = BeautifulSoup(source, 'html.parser')
+        with self.load() as source:
+            article.title = source.parse_title()
+            article.introduction = source.parse_introduction()
+            article.content = source.parse_content()
 
-        article.title = self.parse_title(html)
-        article.introduction = self.parse_introduction(html)
-        article.content = self.get_content(html)
+            category_uri = source.parse_category()
+            tag_uris = source.parse_tags()
 
-        category_uri = self.parse_category(html)
         article.category = self.insert_category(category_uri)
-
-        tag_uris = self.parse_tags(html)
         article.tags = self.insert_tags(tag_uris)
 
         return article
-
-    # Helpers
 
     def insert_category(self, uri: str) -> Category:
         """Create the article's category, if it doesn't exist yet."""
@@ -75,45 +128,16 @@ class ArticleHandler(BaseDocumentHandler):
 
         return sorted(tags, key=lambda t: t.uri)
 
-    @staticmethod
-    def get_content(html: BeautifulSoup) -> Optional[str]:
-        """Search the content of an article, inside its HTML source."""
-        # TODO: Return only article's body, not the whole content (01/2019)
-        try:
-            return ''.join(str(child) for child in html.body.find_all())
-        except AttributeError:
-            return None
+    # Path Scanners
 
-    @staticmethod
-    def parse_category(html: BeautifulSoup) -> Optional[str]:
-        """Search the category of an article, inside its HTML source."""
+    def scan_date(self) -> date:
+        """Return the creation date of a document, based on its :attr:`path`."""  # noqa: E501
         try:
-            return html.head.select_one('meta[name=description]')['content']
-        except (KeyError, TypeError):
-            return None
+            year = int(self.path.parent.name)
+            month, day = map(int, self.path.name.split('.')[0].split('-'))
+        except (IndexError, TypeError):
+            error = 'Path "%s" does not contain a proper date'
+            logger.error(error, self.path)
+            raise ValueError(error % self.path)
 
-    @staticmethod
-    def parse_introduction(html: BeautifulSoup) -> Optional[str]:
-        """Search the introduction of an article, inside its HTML source."""
-        try:
-            return html.body.select_one('#preamble').text.strip()
-        except AttributeError:
-            return None
-
-    @staticmethod
-    def parse_tags(html: BeautifulSoup) -> List[str]:
-        """Search the tags of an article, inside its HTML source."""
-        try:
-            tags = html.head.select_one('meta[name=keywords]')['content']
-        except (KeyError, TypeError):
-            return list()
-
-        return tags.split(', ')
-
-    @staticmethod
-    def parse_title(html: BeautifulSoup) -> Optional[str]:
-        """Search the title of an article, inside its HTML source."""
-        try:
-            return html.body.select_one('h1').text
-        except AttributeError:
-            return None
+        return date(year, month, day)

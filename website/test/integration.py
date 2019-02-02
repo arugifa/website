@@ -8,6 +8,7 @@ from subprocess import PIPE, Popen, run
 from typing import Mapping
 
 from faker import Faker
+from _pytest.fixtures import FixtureRequest
 
 fake = Faker()
 
@@ -35,6 +36,7 @@ class CommandLine:
 @dataclass
 class FileFixtureCollection(AbstractMapping):
     directory: Path
+    request: FixtureRequest
     symlinks: Path
 
     def __getitem__(self, key: str) -> 'FileFixture':
@@ -69,7 +71,9 @@ class FileFixture(PathLike):
     def copy(self, target):
         new_path = self.collection.symlinks / target
 
-        if not new_path.parent.exists():
+        if new_path.exists():
+            new_path.unlink()
+        elif not new_path.parent.exists():
             new_path.parent.mkdir(parents=True)
 
         new_path.symlink_to(self.path)

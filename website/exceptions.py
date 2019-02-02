@@ -29,7 +29,11 @@ class DocumentError(WebsiteException):
     pass
 
 
-class DocumentReadingError(WebsiteException):
+class CategoryNotDefined(DocumentError):
+    pass
+
+
+class DocumentLoadingError(WebsiteException):
     pass
 
 

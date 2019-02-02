@@ -1,23 +1,34 @@
 from datetime import date
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import pytest
 
 from website import exceptions
-from website.blog.content import ArticleHandler
+from website.blog.content import ArticleHandler, ArticleSourceParser
 from website.blog.factories import ArticleFactory, TagFactory
 from website.blog.models import Article, Tag
 
-from tests._test_content import BaseDocumentHandlerTest
+from tests._test_content import BaseDocumentHandlerTest, BaseDocumentSourceParserTest
 
 
 class TestArticleHandler(BaseDocumentHandlerTest):
     handler = ArticleHandler
 
+    @pytest.fixture
+    def document(self, fixtures):
+        return fixtures['blog/article.html']
+
+    @pytest.fixture
+    def answers(self, prompt):
+        prompt.add_answers({
+            r'name for the new "music" category': "Music",
+            r'name for the new "house" tag': "House",
+            r'name for the new "electro" tag': "Electro",
+        })
+
     # Insert article.
 
-    def test_insert_document(self, db, fixtures, prompt):
-        document = self.load_document(fixtures, prompt)
+    def test_insert_document(self, answers, db, document, prompt):
         document.rename('blog/2019/01-31.insert.html')
         article = self.handler(document, prompt=prompt).insert()
 
@@ -44,19 +55,8 @@ class TestArticleHandler(BaseDocumentHandlerTest):
         assert article.tags[1].uri == "house"
         assert article.tags[1].name == "House"
 
-    def load_document(self, fixtures, prompt):
-        prompt.add_answers({
-            r'name for the new "music" category': "Music",
-            r'name for the new "house" tag': "House",
-            r'name for the new "electro" tag': "Electro",
-        })
-
-        return fixtures['blog/article.html']
-
-    def test_insert_already_existing_document(self, db, fixtures):
+    def test_insert_already_existing_document(self, db, document):
         ArticleFactory(uri='existing')
-
-        document = fixtures['blog/article.html']
         document.rename('blog/2019/01-31.existing.html')
 
         with pytest.raises(exceptions.ItemAlreadyExisting):
@@ -64,14 +64,13 @@ class TestArticleHandler(BaseDocumentHandlerTest):
 
     # Update article.
 
-    def test_update_document(self, db, fixtures, prompt):
+    def test_update_document(self, answers, db, document, prompt):
         original = ArticleFactory(
             uri='update', title="To Update",
             introduction="To be updated.", content="Please update me!",
         )
         assert original.last_update is None
 
-        document = self.load_document(fixtures, prompt)
         document.rename('blog/2019/01-31.update.html')
         new = self.handler(document, prompt=prompt).update()
 
@@ -80,8 +79,7 @@ class TestArticleHandler(BaseDocumentHandlerTest):
         assert new.last_update == date.today()
         self.assert_article_has_been_saved(new)
 
-    def test_update_not_existing_document(self, db, fixtures):
-        document = fixtures['blog/article.html']
+    def test_update_not_existing_document(self, db, document):
         document.rename('blog/2019/01-31.missing.html')
 
         with pytest.raises(exceptions.ItemNotFound):
@@ -89,16 +87,14 @@ class TestArticleHandler(BaseDocumentHandlerTest):
 
     # Rename document.
 
-    def test_rename_document(self, db, fixtures, prompt):
+    def test_rename_document(self, answers, db, document, prompt):
         original = ArticleFactory(
             uri='rename', title="To Rename",
             introduction="To be renamed.", content="Please rename me!",
         )
         assert original.last_update is None
 
-        document = self.load_document(fixtures, prompt)
         document.rename('blog/2019/01-31.rename.html')
-
         new_path = document.copy('blog/2019/01-31.new_name.html')
         new = self.handler(document, prompt=prompt).rename(new_path)
 
@@ -107,8 +103,7 @@ class TestArticleHandler(BaseDocumentHandlerTest):
         assert new.last_update == date.today()
         self.assert_article_has_been_saved(new)
 
-    def test_rename_not_existing_document(self, db, fixtures):
-        document = fixtures['blog/article.html']
+    def test_rename_not_existing_document(self, db, document):
         document.rename('blog/2019/01-31.missing.html')
 
         with pytest.raises(exceptions.ItemNotFound):
@@ -120,12 +115,13 @@ class TestArticleHandler(BaseDocumentHandlerTest):
         article = ArticleFactory(uri='delete')
         assert Article.all() == [article]
 
-        document = Path('blog/2019/01-30.delete.txt')
+        document = PurePath('blog/2019/01-30.delete.html')
         self.handler(document).delete()
         assert Article.all() == []
 
     def test_delete_not_existing_document(self, db):
-        document = Path('blog/2019/01-30.missing.txt')
+        document = PurePath('blog/2019/01-30.missing.html')
+
         with pytest.raises(exceptions.ItemNotFound):
             self.handler(document).delete()
 
@@ -134,6 +130,52 @@ class TestArticleHandler(BaseDocumentHandlerTest):
         ArticleFactory(tags=tags, uri='orphan_tags')
         assert Tag.all() == tags
 
-        document = Path('blog/2019/01-30.orphan_tags.txt')
+        document = PurePath('blog/2019/01-30.orphan_tags.html')
         self.handler(document).delete()
         assert Tag.all() == []
+
+    # Parse date.
+
+    def test_scan_date(self):
+        path = PurePath('blog/2018/08-04.date.html')
+        actual = self.handler(path).scan_date()
+        assert actual == date(2018, 8, 4)
+
+    def test_articles_must_be_organized_by_year(self):
+        path = PurePath('blog/04-08.article.txt')
+        with pytest.raises(ValueError):
+            self.handler(path).scan_date()
+
+    @pytest.mark.parametrize('path', [
+        'blog/2019/article.txt',
+        'blog/2019/04.article.txt',
+        'blog/2019/04-.article.txt',
+        'blog/2019/john-doe.article.txt',
+    ])
+    def test_articles_must_be_classified_by_month_and_day(self, path):
+        path = PurePath(path)
+        with pytest.raises(ValueError):
+            self.handler(path).scan_date()
+
+
+class TestArticleSourceParser(BaseDocumentSourceParserTest):
+    parser = ArticleSourceParser
+
+    @pytest.fixture(scope='class')
+    def source(self, fixtures):
+        article = fixtures['blog/article.html'].open().read()
+        return self.parser(article)
+
+    @pytest.fixture(scope='class')
+    def empty_source(self):
+        return self.parser('<html></html>')
+
+    # Find category.
+
+    def test_parse_category(self, source):
+        category = source.parse_category()
+        assert category == 'music'
+
+    def test_parse_not_defined_category(self, empty_source):
+        with pytest.raises(exceptions.CategoryNotDefined):
+            empty_source.parse_category()
