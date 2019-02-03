@@ -1,9 +1,9 @@
-"""Content management of my blog."""
+"""Manage content updates of my blog."""
 
 import logging
 import re
 from datetime import date
-from typing import Iterable, List
+from typing import List
 
 import lxml.etree
 from lxml.cssselect import CSSSelector
@@ -16,16 +16,12 @@ logger = logging.getLogger(__name__)
 
 
 class ArticleSourceParser(BaseDocumentSourceParser):
-    """...
-
-    See https://asciidoctor.org/docs/user-manual/
-    """
+    """Parse source file of a blog article."""
 
     def parse_category(self) -> str:
-        """Search the category of an article in its HTML source.
+        """Look for article's category.
 
-        :raise website.exceptions.ArticleCategoryMissing:
-            when no category is found.
+        :raise ~.ArticleCategoryMissing: when no category is found.
         """
         parser = CSSSelector('html head meta[name=description]')
 
@@ -33,32 +29,17 @@ class ArticleSourceParser(BaseDocumentSourceParser):
             category = parser(self.source)[0].get('content')
             assert category is not None
         except (AssertionError, IndexError):
-            raise exceptions.ArticleCategoryMissing
+            raise exceptions.ArticleCategoryMissing(self)
 
         return category
 
-    def parse_title(self) -> str:
-        """Search the title of an article, inside its HTML source.
-
-        :raise website.exceptions.ArticleTitleMissing: when no title is found.
-        """
-        parser = CSSSelector('html head title')
-
-        try:
-            title = parser(self.source)[0].text_content()
-            assert title
-        except (AssertionError, IndexError):
-            raise exceptions.ArticleTitleMissing
-
-        return title
-
     def parse_lead(self) -> str:
-        """Search the lead of an article, inside its HTML source.
+        """Look for article's lead paragraph.
 
-        :raise website.exceptions.ArticleLeadMissing:
-            when no lead is found.
-        :raise website.exceptions.ArticleLeadMalformatted:
-            when the lead contains many paragraphs.
+        :raise ~.ArticleLeadMissing:
+            when no lead paragraph is found.
+        :raise ~.ArticleLeadMalformatted:
+            when multiple lead paragraphs are found.
         """
         parser = CSSSelector('html body div#content div#preamble p')
         lead = parser(self.source)
@@ -66,22 +47,21 @@ class ArticleSourceParser(BaseDocumentSourceParser):
         try:
             assert len(lead) < 2
         except AssertionError:
-            raise exceptions.ArticleLeadMalformatted
+            raise exceptions.ArticleLeadMalformatted(self)
 
         try:
             lead = lead[0].text_content().strip()
             lead = re.sub(r'\s+', r' ', lead)
             assert lead
         except (AssertionError, IndexError):
-            raise exceptions.ArticleLeadMissing
+            raise exceptions.ArticleLeadMissing(self)
 
         return lead
 
     def parse_body(self) -> str:
-        """Search the content of an article, inside its HTML source.
+        """Look for article's body.
 
-        :raise website.exceptions.ArticleBodyMissing:
-            when no body is found.
+        :raise ~.ArticleBodyMissing: when no body is found.
         """
         parser = CSSSelector('html body div#content div.sect1')
         body = parser(self.source)
@@ -89,7 +69,7 @@ class ArticleSourceParser(BaseDocumentSourceParser):
         try:
             assert body
         except AssertionError:
-            raise exceptions.ArticleBodyMissing
+            raise exceptions.ArticleBodyMissing(self)
 
         body = ''.join(lxml.etree.tounicode(section) for section in body)
 
@@ -97,65 +77,77 @@ class ArticleSourceParser(BaseDocumentSourceParser):
 
 
 class ArticleHandler(BaseDocumentHandler):
-    """Manage articles life cycle."""
+    """Manage the life cycle of a blog article in database.
+
+    Inside its repository, the article's source file must be organized by year,
+    and then classified by month and day, as follows:
+    ``blog/<YEAR>/<MONTH>-<DAY>.<URI>.<EXTENSION>``
+    """
+
     model = Article
     parser = ArticleSourceParser
 
     # Main API
 
     def delete(self) -> None:
-        """Delete an article from database, and clean orphan tags.
+        """Delete article from database, and clean orphan tags.
 
-        :raise website.exceptions.ItemNotFound:
-            if the article doesn't exist.
+        :raise ~.ItemNotFound: if the article doesn't exist.
         """
         super().delete()  # Can raise ItemNotFound
         Tag.delete_orphans()
 
     # Helpers
 
-    def process(self, article: Article) -> Article:
-        """Update an article in database.
+    def process(self, article: Article) -> None:
+        """Parse :attr:`path` and update an article already loaded from database.
 
-        :param create:
-            create the article if it doesn't exist yet in database.
-        :raise website.exceptions.ItemNotFound:
-            if the article cannot be found, and ``create`` is set to ``False``.
+        If the article has new category/tags which don't exist yet in database,
+        then these latter are created interactively (i.e., by asking questions
+        to the user if necessary).
+
+        :param article: the article to update.
+        """  # noqa: E501
+        source = self.load()
+
+        article.title = source.parse_title()
+        article.lead = source.parse_lead()
+        article.body = source.parse_body()
+        article.category = self.insert_category(source)
+        article.tags = self.insert_tags(source)
+
+    def insert_category(self, source: ArticleSourceParser) -> Category:
+        """Return article's category, and create it in database if necessary.
+
+        :param source: parser of the article's source file.
         """
-        with self.load() as source:
-            article.title = source.parse_title()
-            article.lead = source.parse_lead()
-            article.body = source.parse_body()
+        uri = source.parse_category()
 
-            category_uri = source.parse_category()
-            tag_uris = source.parse_tags()
-
-        article.category = self.insert_category(category_uri)
-        article.tags = self.insert_tags(tag_uris)
-
-        return article
-
-    def insert_category(self, uri: str) -> Category:
-        """Create the article's category, if it doesn't exist yet."""
         try:
             category = Category.find(uri=uri)
         except exceptions.ItemNotFound:
-            name = self.prompt(f'Please enter a name for the new "{uri}" category: ')
+            name = self.prompt(
+                f'Please enter a name for the new "{uri}" category: ')
             category = Category(uri=uri, name=name)
             category.save()
 
         return category
 
-    def insert_tags(self, uris: Iterable[str]) -> List[Tag]:
-        """Create the article's tags, if they don't exist yet."""
+    def insert_tags(self, source: ArticleSourceParser) -> List[Tag]:
+        """Return article's tags, and create new ones in database if necessary.
+
+        :param source: parser of the article's source file.
+        """
+        uris = source.parse_tags()
         tags = Tag.filter(uri=uris)
 
         existing = set([tag.uri for tag in tags])
         new = set(uris) - existing
 
         for uri in new:
-            name = self.prompt(f'Please enter a name for the new "{uri}" tag: ')
-            tag = Tag(name=name, uri=uri)
+            name = self.prompt(
+                f'Please enter a name for the new "{uri}" tag: ')
+            tag = Tag(uri=uri, name=name)
             tag.save()
             tags.append(tag)
 
@@ -164,13 +156,14 @@ class ArticleHandler(BaseDocumentHandler):
     # Path Scanners
 
     def scan_date(self) -> date:
-        """Return the creation date of a document, based on its :attr:`path`."""  # noqa: E501
+        """Return article's creation date, based on its :attr:`path`.
+
+        :raise ~.ArticleDateMalformatted: when the article is not
+        """
         try:
             year = int(self.path.parent.name)
             month, day = map(int, self.path.name.split('.')[0].split('-'))
         except (IndexError, TypeError):
-            error = 'Path "%s" does not contain a proper date'
-            logger.error(error, self.path)
-            raise ValueError(error % self.path)
+            raise exceptions.ArticleDateMalformatted(self)
 
         return date(year, month, day)

@@ -2,7 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
-from contextlib import AbstractContextManager, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PurePath
@@ -12,8 +12,7 @@ import lxml.etree
 import lxml.html
 from lxml.cssselect import CSSSelector
 
-from website.exceptions import (
-    ItemAlreadyExisting, ItemNotFound, DocumentLoadingError)
+from website import exceptions
 from website.models import Document
 
 logger = logging.getLogger(__name__)
@@ -142,44 +141,51 @@ class ContentManager:
 
 @dataclass
 class BaseDocumentHandler(ABC):
-    """Manage documents life cycle.
-
-    Load document sources from local files, and update their state in database.
+    """Manage the life cycle of a document in database.
 
     :param path:
-        document's path, relative to its repository
-        (e.g., ``blog/<YEAR>/<MONTH>-<DAY>.<URI>.<EXTENSION>``).
+        path of the document's source file, relative to its repository.
+        Every document must be written in HTML, and respect a naming
+        convention. See documentation of handler subclasses for more info.
     :param reader:
-        function to read documents in the repository.
+        function to read the documents.
     :param prompt:
         function to interactively ask questions during documents import,
-        when certain things cannot be completely done automatically.
+        when certain things cannot be inferred automatically.
     """
+
     path: Union[Path, PurePath]
     reader: Callable = open
     prompt: Callable = input
 
+    #: Document model clas.
     model: ClassVar[Document]
+    #: Document parser class.
     parser: ClassVar['BaseDocumentSourceParser']
 
     # Main API
 
     def insert(self) -> Document:
-        """Insert a document into database.
+        """Insert document into database.
 
-        :raise website.exceptions.ItemAlreadyExisting:
+        :return:
+            the newly created document.
+        :raise ~.ItemAlreadyExisting:
             if a conflict happens during document insertion.
         """
-        return self.update(create=True)
+        return self.update(create=True)  # Can raise ItemAlreadyExisting
 
     def update(self, uri: str = None, create: bool = False) -> Document:
-        """Update a document in database.
+        """Update document in database.
 
         :param uri:
             URI the document currently has in database.
         :param create:
             create the document if it doesn't exist yet in database.
-        :raise website.exceptions.ItemNotFound:
+        :return:
+            the updated document.
+
+        :raise ~.ItemNotFound:
             if the document cannot be found, and ``create`` is set to ``False``.
         """  # noqa: E501
         if create:
@@ -187,7 +193,7 @@ class BaseDocumentHandler(ABC):
             document = self.model(uri=uri)
 
             if document.exists():
-                raise ItemAlreadyExisting(uri)
+                raise exceptions.ItemAlreadyExisting(uri)
 
         elif uri:  # Rename and update
             document = self.model.find(uri=uri)  # Can raise ItemNotFound
@@ -204,22 +210,22 @@ class BaseDocumentHandler(ABC):
 
         return document
 
-    def rename(self, new_path: Path) -> Document:
-        """Rename (and update) a document in database.
+    def rename(self, target: Path) -> Document:
+        """Rename (and update) document in database.
 
-        :raise website.exceptions.ItemNotFound:
-            if the document doesn't exist.
+        :param target: the new path of document's source file.
+        :return: the updated and renamed document.
+        :raise ~.ItemNotFound: if the document doesn't exist.
         """
         # TODO: Set-up an HTTP redirection (01/2019)
         uri = self.scan_uri()
-        handler = self.__class__(new_path, self.reader, self.prompt)
+        handler = self.__class__(target, self.reader, self.prompt)
         return handler.update(uri)
 
     def delete(self) -> None:
         """Remove a document from database.
 
-        :raise website.exceptions.ItemNotFound:
-            if the document doesn't exist.
+        :raise ~.ItemNotFound: if the document doesn't exist.
         """
         uri = self.scan_uri()
         document = self.model.find(uri=uri)  # Can raise ItemNotFound
@@ -228,42 +234,63 @@ class BaseDocumentHandler(ABC):
     # Helpers
 
     def load(self):
+        """Read and prepare for parsing the source file located at :attr:`path`.
+
+        :raise ~.DocumentLoadingError:
+            when something wrong happens while reading the source file
+            (e.g., file not found or unsupported format).
+        """  # noqa: E501
         try:
             with self.reader(self.path) as f:
                 source = f.read()
         except (OSError, UnicodeDecodeError) as exc:
-            error = "Unable to read %s: %s"
-            logger.error(error, self.path, exc)
-            raise DocumentLoadingError(error % (self.path, exc))
+            raise exceptions.DocumentLoadingError(self, exc)
 
         return self.parser(source)
 
     @abstractmethod
     def process(self, document: Document) -> None:
-        """Prepare the document in order to save it in database later on."""
-        pass
+        """Parse :attr:`path` and update a document already loaded from database.
+
+        :param document: the document to update.
+        """  # noqa: E501
 
     # Path Scanners
 
     def scan_uri(self) -> str:
-        """Return the URI of a document, based on its :attr:`path`."""
+        """Return document's URI, based on its :attr:`path`."""
         return self.path.stem.split('.')[-1]
 
 
-class BaseDocumentSourceParser(AbstractContextManager):
-    def __init__(self, source: str):
-        self._source = source
+class BaseDocumentSourceParser:
+    """Parse HTML source of a document.
 
+    :raise ~.DocumentMalformatted: when the given source is not valid HTML.
+    """
+
+    def __init__(self, source: str):
         try:
             self.source = lxml.html.document_fromstring(source)
         except lxml.etree.ParserError:
-            pass
+            raise exceptions.DocumentMalformatted(source)
 
-    def __exit__(self, *args, **kwargs):
-        return super().__exit__(*args, **kwargs)
+    def parse_title(self) -> str:
+        """Look for document's title.
+
+        :raise ~.DocumentTitleMissing: when no title is found.
+        """
+        parser = CSSSelector('html head title')
+
+        try:
+            title = parser(self.source)[0].text_content()
+            assert title
+        except (AssertionError, IndexError):
+            raise exceptions.DocumentTitleMissing(self)
+
+        return title
 
     def parse_tags(self) -> List[str]:
-        """Search the tags of an article, inside its HTML source."""
+        """Look for document's tags."""
         parser = CSSSelector('html head meta[name=keywords]')
 
         try:

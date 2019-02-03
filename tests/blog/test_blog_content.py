@@ -8,7 +8,8 @@ from website.blog.content import ArticleHandler, ArticleSourceParser
 from website.blog.factories import ArticleFactory, TagFactory
 from website.blog.models import Article, Tag
 
-from tests._test_content import BaseDocumentHandlerTest, BaseDocumentSourceParserTest
+from tests._test_content import (  # noqa: I100
+    BaseDocumentHandlerTest, BaseDocumentSourceParserTest)
 
 
 class TestArticleHandler(BaseDocumentHandlerTest):
@@ -92,7 +93,7 @@ class TestArticleHandler(BaseDocumentHandlerTest):
         with pytest.raises(exceptions.ItemNotFound):
             self.handler(document).update()
 
-    # Rename document.
+    # Rename article.
 
     def test_rename_document(self, answers, db, document, prompt):
         original = ArticleFactory(
@@ -141,6 +142,16 @@ class TestArticleHandler(BaseDocumentHandlerTest):
         self.handler(document).delete()
         assert Tag.all() == []
 
+    # Insert category.
+
+    def test_insert_category(self):
+        raise NotImplementedError
+
+    # Insert tags.
+
+    def test_insert_tags(self):
+        raise NotImplementedError
+
     # Scan date.
 
     def test_scan_date(self):
@@ -186,20 +197,6 @@ class TestArticleSourceParser(BaseDocumentSourceParserTest):
     def test_parse_missing_category(self, html):
         with pytest.raises(exceptions.ArticleCategoryMissing):
             self.parser(html).parse_category()
-
-    # Parse title.
-
-    def test_parse_title(self, source):
-        title = source.parse_title()
-        assert title == 'House Music Spirit'
-
-    @pytest.mark.parametrize('html', [
-        '<html></html>',
-        '<html><title></title></html>',
-    ])
-    def test_parse_missing_title(self, html):
-        with pytest.raises(exceptions.ArticleTitleMissing):
-            self.parser(html).parse_title()
 
     # Parse lead.
 

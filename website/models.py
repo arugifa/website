@@ -62,14 +62,14 @@ class BaseModel(db.Model):
     def delete(self) -> None:
         """Remove item from database."""
         db.session.delete(self)
-        db.session.flush()
+        db.session.flush([self])
 
     def save(self) -> None:
         """Save item into database."""
         db.session.add(self)
 
         try:
-            db.session.flush()
+            db.session.flush([self])
         except sql_errors.IntegrityError:
             raise ItemAlreadyExisting(self)
 

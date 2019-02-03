@@ -1,6 +1,5 @@
 import gzip
 from abc import ABC, abstractmethod
-from datetime import date
 from pathlib import PurePath
 from typing import ClassVar
 
@@ -62,13 +61,6 @@ class BaseDocumentHandlerTest(ABC):
         parser = self.handler(document).load()
         assert parser.source.text_content() == "Hello, World!"
 
-    def test_load_document_with_context_manager(self, tmp_path):
-        document = tmp_path / 'document.html'
-        document.write_text("Hello, World!")
-
-        with self.handler(document).load() as parser:
-            assert parser.source.text_content() == "Hello, World!"
-
     def test_load_not_existing_document(self, tmp_path):
         document = tmp_path / 'void.html'
 
@@ -99,6 +91,26 @@ class BaseDocumentSourceParserTest:
     def base_source(self, fixtures):
         document = fixtures['document.html'].open().read()
         return self.parser(document)
+
+    # Initialize parser.
+
+    def test_source_must_be_valid_html(self):
+        with pytest.raises(exceptions.DocumentMalformatted):
+            self.parser('')
+
+    # Parse title.
+
+    def test_parse_title(self, base_source):
+        title = base_source.parse_title()
+        assert title == 'Standard Document'
+
+    @pytest.mark.parametrize('html', [
+        '<html></html>',
+        '<html><title></title></html>',
+    ])
+    def test_parse_missing_title(self, html):
+        with pytest.raises(exceptions.DocumentTitleMissing):
+            self.parser(html).parse_title()
 
     # Parse tags.
 

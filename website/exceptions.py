@@ -33,11 +33,19 @@ class DocumentParsingError(DocumentError):
     pass
 
 
+class DocumentMalformatted(WebsiteException):
+    pass
+
+
+class ArticleDateMalformatted(DocumentParsingError):
+    pass
+
+
 class ArticleCategoryMissing(DocumentParsingError):
     pass
 
 
-class ArticleTitleMissing(DocumentParsingError):
+class DocumentTitleMissing(DocumentParsingError):
     pass
 
 

@@ -14,6 +14,8 @@ class AsciidoctorToHTMLConverter(BaseDocumentReader):
         converter = AsciidoctorToHTMLConverter(subprocess.run)
         content = converter(asciidoctor_file_path).read()
 
+    For more info about Asciidoctor: https://asciidoctor.org/docs/user-manual/
+
     :param run:
         function to run Asciidoctor in a shell.
         Must have the same API than :func:`subprocess.run`.
