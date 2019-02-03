@@ -1,6 +1,5 @@
 """Manage content updates of my blog."""
 
-import logging
 import re
 from datetime import date
 from typing import List
@@ -11,8 +10,6 @@ from lxml.cssselect import CSSSelector
 from website import exceptions
 from website.blog.models import Article, Category, Tag
 from website.content import BaseDocumentHandler, BaseDocumentSourceParser
-
-logger = logging.getLogger(__name__)
 
 
 class ArticleSourceParser(BaseDocumentSourceParser):
@@ -116,11 +113,14 @@ class ArticleHandler(BaseDocumentHandler):
         article.category = self.insert_category(source)
         article.tags = self.insert_tags(source)
 
-    def insert_category(self, source: ArticleSourceParser) -> Category:
+    def insert_category(self, source: ArticleSourceParser = None) -> Category:
         """Return article's category, and create it in database if necessary.
 
-        :param source: parser of the article's source file.
+        If already loaded previously, the article's source file can be given as
+        an argument, to not load it again, and avoid inconsistencies if the
+        file changed in the meantime.
         """
+        source = source or self.load()
         uri = source.parse_category()
 
         try:
@@ -133,11 +133,14 @@ class ArticleHandler(BaseDocumentHandler):
 
         return category
 
-    def insert_tags(self, source: ArticleSourceParser) -> List[Tag]:
+    def insert_tags(self, source: ArticleSourceParser = None) -> List[Tag]:
         """Return article's tags, and create new ones in database if necessary.
 
-        :param source: parser of the article's source file.
+        If already loaded previously, the article's source file can be given as
+        an argument, to not load it again, and avoid inconsistencies if the
+        file changed in the meantime.
         """
+        source = source or self.load()
         uris = source.parse_tags()
         tags = Tag.filter(uri=uris)
 

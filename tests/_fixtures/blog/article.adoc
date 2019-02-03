@@ -1,6 +1,6 @@
 = House Music Spirit
 :description: music
-:keywords: house, electro
+:keywords: house, electro, funk
 
 How House Music could save the world?
 

@@ -5,7 +5,7 @@ import pytest
 
 from website import exceptions
 from website.blog.content import ArticleHandler, ArticleSourceParser
-from website.blog.factories import ArticleFactory, TagFactory
+from website.blog.factories import ArticleFactory, CategoryFactory, TagFactory
 from website.blog.models import Article, Tag
 
 from tests._test_content import (  # noqa: I100
@@ -25,6 +25,7 @@ class TestArticleHandler(BaseDocumentHandlerTest):
             r'name for the new "music" category': "Music",
             r'name for the new "house" tag': "House",
             r'name for the new "electro" tag': "Electro",
+            r'name for the new "funk" tag': "Funk",
         })
 
     # Insert article.
@@ -57,11 +58,13 @@ class TestArticleHandler(BaseDocumentHandlerTest):
         assert article.category.uri == "music"
         assert article.category.name == "Music"
 
-        assert len(article.tags) == 2
+        assert len(article.tags) == 3
         assert article.tags[0].uri == "electro"
         assert article.tags[0].name == "Electro"
-        assert article.tags[1].uri == "house"
-        assert article.tags[1].name == "House"
+        assert article.tags[1].uri == "funk"
+        assert article.tags[1].name == "Funk"
+        assert article.tags[2].uri == "house"
+        assert article.tags[2].name == "House"
 
     def test_insert_already_existing_document(self, db, document):
         ArticleFactory(uri='existing')
@@ -144,13 +147,65 @@ class TestArticleHandler(BaseDocumentHandlerTest):
 
     # Insert category.
 
-    def test_insert_category(self):
-        raise NotImplementedError
+    def test_insert_not_existing_category(self, answers, db, document, prompt):
+        category = self.handler(document, prompt=prompt).insert_category()
+        assert category.uri == 'music'
+        assert category.name == 'Music'
+
+    def test_insert_already_existing_category(self, db, document):
+        expected = CategoryFactory(uri='music', name='Musika')
+        actual = self.handler(document).insert_category()
+
+        # Let's be sure that attributes have not changed.
+        assert actual is expected
+        assert actual.uri == 'music'
+        assert actual.name == 'Musika'
 
     # Insert tags.
 
-    def test_insert_tags(self):
-        raise NotImplementedError
+    def test_insert_not_existing_tags(self, answers, db, document, prompt):
+        tags = self.handler(document, prompt=prompt).insert_tags()
+
+        assert len(tags) == 3
+        assert tags[0].uri == 'electro'
+        assert tags[0].name == 'Electro'
+        assert tags[1].uri == 'funk'
+        assert tags[1].name == 'Funk'
+        assert tags[2].uri == 'house'
+        assert tags[2].name == 'House'
+
+    def test_insert_already_existing_tags(self, db, document):
+        expected = [
+            TagFactory(uri='electro', name='Electrico'),
+            TagFactory(uri='funk', name='Funky'),
+            TagFactory(uri='house', name='Maison'),
+        ]
+        actual = self.handler(document).insert_tags()
+
+        # Let's be sure that attributes have not changed.
+        assert len(actual) == len(expected)
+        assert actual[0].uri == 'electro'
+        assert actual[0].name == 'Electrico'
+        assert actual[1].uri == 'funk'
+        assert actual[1].name == 'Funky'
+        assert actual[2].uri == 'house'
+        assert actual[2].name == 'Maison'
+
+    def test_insert_tags_that_do_not_all_exist(
+            self, answers, db, document, prompt):
+        existing = TagFactory(uri='funk', name='Funky')
+        all_tags = self.handler(document, prompt=prompt).insert_tags()
+
+        assert len(all_tags) == 3
+        assert all_tags[0].uri == 'electro'
+        assert all_tags[0].name == 'Electro'
+        assert all_tags[2].uri == 'house'
+        assert all_tags[2].name == 'House'
+
+        # Let's be sure that attributes of the existing tag have not changed.
+        assert all_tags[1] is existing
+        assert all_tags[1].uri == 'funk'
+        assert all_tags[1].name == 'Funky'
 
     # Scan date.
 
