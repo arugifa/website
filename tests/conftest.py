@@ -13,8 +13,10 @@ from website.config import TestingConfig
 from website.factories import BaseCloudFactory
 from website.stubs import CloudConnectionStub
 from website.test.integration import (
-    CommandLine, FileFixtureCollection, InvokeStub, Prompt, RunReal, RunStub)
+    CommandLine, FileFixtureCollection, InvokeStub, Prompt, RunReal, RunStub,
+    Shell)
 from website.test.pytest import FixtureMarker
+from website.utils.asciidoctor import AsciidoctorToHTMLConverter
 
 here = Path(__file__).parent.resolve()
 integration_test = FixtureMarker()
@@ -42,10 +44,18 @@ def pytest_collection_modifyitems(items):
     global integration_test
 
     for item in items:
+        integration_fixtures = integration_test.fixtures & set(item.fixturenames)  # noqa: E501
+
         if 'tests/acceptance/' in item.module.__file__:
             item.add_marker(pytest.mark.acceptance)
-        elif integration_test.fixtures & set(item.fixturenames):
+
+        elif integration_fixtures:
             item.add_marker(pytest.mark.integration)
+
+            for fixture in integration_fixtures:
+                marker = getattr(pytest.mark, fixture)
+                item.add_marker(marker)
+
         else:
             item.add_marker(pytest.mark.unit)
 
@@ -56,6 +66,12 @@ def pytest_collection_modifyitems(items):
 def app():
     # Used by pytest-flask.
     return create_app(TestingConfig)
+
+
+@pytest.fixture(scope='session')
+@integration_test
+def asciidoctor():
+    return AsciidoctorToHTMLConverter()
 
 
 @pytest.fixture
@@ -131,9 +147,14 @@ def prompt():
     return Prompt()
 
 
+@pytest.fixture
+def shell():
+    return Shell()
+
+
 @pytest.fixture(scope='session')
 @integration_test
-def shell():
+def shell_bck():
     def runner(cmdline):
         cmdline = shlex.split(cmdline)
         return run(cmdline, check=True, stdout=PIPE, encoding='utf-8')

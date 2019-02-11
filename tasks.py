@@ -15,10 +15,10 @@ from website.cloud import CloudManager
 from website.config import DevelopmentConfig
 from website.content import ContentManager
 from website.exceptions import ContentUpdateException
-from website.git import Repository
 from website.helpers import setup_demo
 from website.stubs import CloudConnectionStub
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
+from website.utils.git import Repository
 
 here = Path(__file__).parent
 logger = logging.getLogger(__name__)
@@ -100,9 +100,9 @@ def update(ctx, db, repository, commit='HEAD~1', force=False):
     app = create_app(config)
 
     # Get list of modified documents in the repository.
-    repository = Repository(repository)
     invoke_shell = partial(ctx.run, hide='stdout')
-    diff = repository.print_diff(commit, shell=invoke_shell)
+    repository = Repository(repository, shell=invoke_shell)
+    diff = repository.diff(commit, display=True)
 
     if not force:
         confirm()
@@ -117,7 +117,7 @@ def update(ctx, db, repository, commit='HEAD~1', force=False):
             content.update(repository.path, diff)
         except ContentUpdateException:
             _db.session.rollback()
-            logger.error("No change has been made to the database")
+            print("No change has been made to the database")
         else:
             _db.session.commit()
 

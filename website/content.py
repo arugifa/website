@@ -2,7 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
-from contextlib import contextmanager
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PurePath
@@ -138,6 +138,8 @@ class ContentManager:
         path = repository / document
         return handler(path, self.reader, self.prompt)
 
+
+# Document Processing
 
 @dataclass
 class BaseDocumentHandler(ABC):
@@ -303,17 +305,34 @@ class BaseDocumentSourceParser:
         return tags
 
 
-@dataclass
-class BaseDocumentReader(ABC):
-    #: Path of the currently read document.
-    #: Initialized when calling a reader instance later on.
-    path: Path = None
+# Document Reading
 
-    @contextmanager
-    def __call__(self, path: Path):
-        """Prepare the reader for further reading."""
-        self.path = path
-        yield self
+class BaseDocumentReader(ABC):
+    """Base class for all document readers.
+
+    Provides a subset of :func:`open`'s API.
+
+    :param pathlib.Path path:
+        path of the document to read. Initialized by :meth:`__call__`.
+    """
+
+    def __init__(self):
+        self.path = None
+
+    def __call__(self, path: Union[str, Path]) -> 'DocumentOpener':
+        """Open the document for further reading.
+
+        Can be called directly or used as a context manager.
+
+        :raise OSError: if the document cannot be opened.
+        """
+        path = Path(path)
+
+        if not path.is_file():
+            raise OSError(f"Document doesn't exist: {path}")
+
+        self.path = Path(path)
+        return DocumentOpener(self)
 
     @abstractmethod
     def read(self) -> str:
@@ -321,6 +340,27 @@ class BaseDocumentReader(ABC):
 
         The returned string must be in HTML format.
 
-        :raise OSError: when cannot open the document.
-        :raise UnicodeDecodeError: when cannot read the document's content.
+        :raise ValueError: when cannot read the document's content.
         """
+
+
+@dataclass
+class DocumentOpener(AbstractContextManager):
+    """Helper for :class:`BaseDocumentReader` to open documents.
+
+    :param reader: reader instance opening the document.
+    """
+
+    reader: BaseDocumentReader
+
+    def __getattr__(self, name: str):
+        """Let :attr:`reader` opening a document as a function call."""
+        return getattr(self.reader, name)
+
+    def __enter__(self) -> BaseDocumentReader:
+        """Let :attr:`reader` opening a document inside a context manager."""
+        return self.reader
+
+    def __exit__(self, *exc) -> None:
+        """Nothing done here for the moment..."""
+        return

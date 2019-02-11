@@ -67,3 +67,9 @@ class DocumentLoadingError(WebsiteException):
 
 class ContentUpdateException(WebsiteException):
     pass
+
+
+# ...
+
+class CommandLineError(WebsiteException):
+    pass

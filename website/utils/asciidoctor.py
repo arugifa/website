@@ -1,41 +1,45 @@
-"""Collection of helpers for Asciidoctor (https://asciidoctor.org/)."""
+"""Asciidoctor helpers (https://asciidoctor.org/)."""
 
 from typing import Callable
 
 from website.content import BaseDocumentReader
-from website.utils import default_runner
+from website.exceptions import CommandLineError
+from website.utils import BaseCommandLine
 
 
-class AsciidoctorToHTMLConverter(BaseDocumentReader):
-    """Asciidoctor reader with the same API than :func:`open`.
+class AsciidoctorToHTMLConverter(BaseDocumentReader, BaseCommandLine):
+    """Asciidoctor to HTML converter, using ``asciidoctor`` command-line tool.
 
-    To be used as follows::
+    Can be used as follows::
 
-        converter = AsciidoctorToHTMLConverter(subprocess.run)
-        content = converter(asciidoctor_file_path).read()
+        convert = AsciidoctorToHTMLConverter()
+
+        with convert(document_path) as html:
+            content = html.read()
 
     For more info about Asciidoctor: https://asciidoctor.org/docs/user-manual/
 
-    :param run:
-        function to run Asciidoctor in a shell.
-        Must have the same API than :func:`subprocess.run`.
+    :param shell:
+        alternative shell to run ``asciidoctor``. Must have a similar API to
+        :func:`subprocess.run`, and raise an exception when executed commands
+        exit with a nonzero status code.
+
+    :raise OSError:
+        if Asciidoctor is not installed on the machine.
     """
 
-    def __init__(self, run: Callable = default_runner):
-        super().__init__()
-        self.run = run
+    def __init__(self, shell: Callable = None):
+        BaseDocumentReader.__init__(self)
+        BaseCommandLine.__init__(self, shell=shell)
+
+        if not self.is_installed():
+            raise OSError("Asciidoctor binary not found")
 
     def read(self) -> str:
-        """Read file located at :attr:`path`, using Asciidoctor."""
-        """
-        cmdline = (
-            'asciidoctor '
-            '--no-header-footer '
-            '-a showtitle=true '
-            '--out-file - '
-            f'{self.path}')
-        """
+        """Read document located at :attr:`path`, using ``asciidoctor``.
 
+        :raise ValueError: if Asciidoctor cannot convert the document.
+        """
         cmdline = (
             f'asciidoctor '
             # Don't use a stylesheet and deactivate warnings.
@@ -43,4 +47,17 @@ class AsciidoctorToHTMLConverter(BaseDocumentReader):
             # Print the output on stdout.
             f'--out-file - {self.path}'
         )
-        return self.run(cmdline).stdout
+
+        try:
+            return self.run(cmdline).strip()
+        except CommandLineError as exc:
+            raise ValueError(str(exc))
+
+    def is_installed(self) -> bool:
+        """Check if Asciidoctor is installed on the machine."""
+        try:
+            self.run('which asciidoctor')
+        except CommandLineError:
+            return False
+
+        return True
