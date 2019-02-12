@@ -1,4 +1,7 @@
-"""Asciidoctor helpers (https://asciidoctor.org/)."""
+"""Helpers to process website's content written with Asciidoctor.
+
+See https://asciidoctor.org/ to get more insights.
+"""
 
 from typing import Callable
 
@@ -28,12 +31,11 @@ class AsciidoctorToHTMLConverter(BaseDocumentReader, BaseCommandLine):
         if Asciidoctor is not installed on the machine.
     """
 
+    program = 'asciidoctor'
+
     def __init__(self, shell: Callable = None):
         BaseDocumentReader.__init__(self)
-        BaseCommandLine.__init__(self, shell=shell)
-
-        if not self.is_installed():
-            raise OSError("Asciidoctor binary not found")
+        BaseCommandLine.__init__(self, shell=shell)  # Can raise OSError
 
     def read(self) -> str:
         """Read document located at :attr:`path`, using ``asciidoctor``.
@@ -41,7 +43,6 @@ class AsciidoctorToHTMLConverter(BaseDocumentReader, BaseCommandLine):
         :raise ValueError: if Asciidoctor cannot convert the document.
         """
         cmdline = (
-            f'asciidoctor '
             # Don't use a stylesheet and deactivate warnings.
             f'-q -a stylesheet=missing.css '
             # Print the output on stdout.
@@ -52,12 +53,3 @@ class AsciidoctorToHTMLConverter(BaseDocumentReader, BaseCommandLine):
             return self.run(cmdline).strip()
         except CommandLineError as exc:
             raise ValueError(str(exc))
-
-    def is_installed(self) -> bool:
-        """Check if Asciidoctor is installed on the machine."""
-        try:
-            self.run('which asciidoctor')
-        except CommandLineError:
-            return False
-
-        return True

@@ -1,132 +1,133 @@
+import os
+from functools import partial
 from io import StringIO
+from pathlib import Path
 from textwrap import dedent
 
 import pytest
 
-from website.utils import git as git_utils
+from website.utils.git import Repository
+
+from tests.utils._test_utils import BaseCommandLineTest  # noqa: I100
 
 
-class TestGetDiff():
+class TestRepository(BaseCommandLineTest):
+
     @pytest.fixture(scope='class')
-    def repository(self, shell, tmpdir_factory):
-        tmpdir = tmpdir_factory.mktemp('test_get_diff')
+    def default(self, git):
+        return partial(Repository, 'empty')
 
-        with tmpdir.as_cwd():
-            shell(f'git init {tmpdir}')
-            tmpdir.ensure('init.txt')
+    @pytest.fixture(scope='class')
+    def repository(self, git, tmp_path_factory):
+        cwd = os.getcwd()
+        tmpdir = tmp_path_factory.mktemp('test_repository')
 
-            shell(f'git add {tmpdir}')
-            shell('git commit -m "First commit"')
+        try:
+            os.chdir(tmpdir)
 
-            # Populate repository.
-            modified = tmpdir.ensure('modified.txt')
-            renamed = tmpdir.ensure('to_rename.txt')
-            # To not be confused with empty added/deleted files.
-            renamed.write('renamed')
-            deleted = tmpdir.ensure('deleted.txt')
-            # To not be confused with empty added/renamed files.
-            deleted.write('deleted')
+            # Initialize repository.
+            repo = git.init(tmpdir)
 
-            shell(f'git add {tmpdir}')
-            shell('git commit -m "Second commit"')
+            readme = tmpdir / 'README.txt'
+            readme.touch()
+
+            repo.add([readme])
+            repo.commit("HEAD~3")
+
+            # Populate repository with non-empty files,
+            # otherwise Git can be lost with file names later on.
+            to_modify = tmpdir / 'modified.txt'
+            to_modify.write_text('to modify')
+
+            to_delete = tmpdir / 'deleted.txt'
+            to_delete.write_text('to delete')
+
+            to_rename = tmpdir / 'to_rename.txt'
+            to_rename.write_text('to rename')
+
+            repo.add([to_modify, to_delete, to_rename])
+            repo.commit("HEAD~2")
 
             # Proceed to some changes.
-            deleted.remove()
-            renamed.rename(tmpdir.join('renamed.txt'))
-            modified.write('modified')
-            tmpdir.ensure('added.txt')
+            to_delete.unlink()
 
-            shell(f'git add {tmpdir}')
-            shell('git commit -m "Third commit"')
+            renamed = tmpdir / 'renamed.txt'
+            to_rename.rename(renamed)
 
-            # Make another commit, to have more than 2 commits.
-            tmpdir.ensure('new.txt')
-            shell(f'git add {tmpdir}')
-            shell('git commit -m "Last commit"')
+            to_modify.write_text('modified')
 
-        return tmpdir
+            added = tmpdir / 'added.txt'
+            added.write_text('added')
 
-    def test_get_diff_using_head(self, git, monkeypatch, repository):
-        git.output = dedent("""\
-            A\tadded.txt
-            D\tdeleted.txt
-            M\tmodified.txt
-            A\tnew.txt
-            R100\tto_rename.txt\trenamed.txt
-        """)
+            repo.add()
+            repo.commit("HEAD~1")
 
-        monkeypatch.chdir(repository)
-        actual = git_utils.get_diff('HEAD~2', shell=git)
+            # Make one last commit,
+            # to be able to compare not subsequent commits.
+            new = tmpdir / 'new.txt'
+            new.write_text('new')
 
-        expected = (
-            ['added.txt', 'new.txt'],
-            ['modified.txt'],
-            [('to_rename.txt', 'renamed.txt')],
-            ['deleted.txt'],
-        )
+            repo.add([new])
+            repo.commit("HEAD")
+
+        finally:
+            os.chdir(cwd)
+
+        return repo
+
+    # Git diff.
+
+    def test_diff_between_two_specific_commits(self, git, repository):
+        actual = repository.diff('HEAD~2', 'HEAD~1')
+
+        expected = {
+            'added': [Path('added.txt')],
+            'modified': [Path('modified.txt')],
+            'renamed': [(Path('to_rename.txt'), Path('renamed.txt'))],
+            'deleted': [Path('deleted.txt')],
+        }
         assert actual == expected
 
-    def test_get_diff_between_two_commits(self, git, monkeypatch, repository):
-        git.output = dedent("""\
-            A\tadded.txt
-            D\tdeleted.txt
-            M\tmodified.txt
-            R100\tto_rename.txt\trenamed.txt
-        """)
+    def test_diff_from_one_specific_commit_to_head(self, repository):
+        actual = repository.diff('HEAD~2')
 
-        monkeypatch.chdir(repository)
-        actual = git_utils.get_diff('HEAD~2', 'HEAD~1', shell=git)
-
-        expected = (
-            ['added.txt'],
-            ['modified.txt'],
-            [('to_rename.txt', 'renamed.txt')],
-            ['deleted.txt'],
-        )
+        expected = {
+            'added': [Path('added.txt'), Path('new.txt')],
+            'modified': [Path('modified.txt')],
+            'renamed': [(Path('to_rename.txt'), Path('renamed.txt'))],
+            'deleted': [Path('deleted.txt')],
+        }
         assert actual == expected
 
-    def test_get_partial_diff(self, git, monkeypatch, repository):
-        git.output = dedent("""\
-            A\tadded.txt
-            A\tmodified.txt
-            A\tnew.txt
-            A\trenamed.txt
-        """)
+    def test_diff_with_changes_lost_between_not_subsequent_commits(
+            self, git, repository):
+        actual = repository.diff('HEAD~3')
 
-        monkeypatch.chdir(repository)
-        actual = git_utils.get_diff('HEAD~3', shell=git)
-
-        expected = (
-            ['added.txt', 'modified.txt', 'new.txt', 'renamed.txt'],
-            [],
-            [],
-            [],
-        )
+        expected = {
+            'added': [
+                Path('added.txt'),
+                Path('modified.txt'),
+                Path('new.txt'),
+                Path('renamed.txt'),
+            ],
+            'modified': [],
+            'renamed': [],
+            'deleted': [],
+        }
         assert actual == expected
 
+    def test_print_diff(self, repository):
+        stream = StringIO()
+        repository.diff('HEAD~2', quiet=False, output=stream)
 
-def test_print_diff():
-    diff = (
-        ['added_1', 'added_2'],
-        ['modified_1', 'modified_2'],
-        [('to_rename_1', 'renamed_1'), ('to_rename_2', 'renamed_2')],
-        ['deleted_1', 'deleted_2'],
-    )
-
-    stream = StringIO()
-    git_utils.print_diff(stream, diff)
-
-    assert stream.getvalue() == dedent("""\
-        The following files have been added:
-        - added_1
-        - added_2
-        The following files have been modified:
-        - modified_1
-        - modified_2
-        The following files have been renamed:
-        - to_rename_1 -> renamed_1
-        - to_rename_2 -> renamed_2
-        The following files have been deleted:
-        - deleted_1
-        - deleted_2
-    """)
+        assert stream.getvalue() == dedent("""\
+            The following files have been added:
+            - added.txt
+            - new.txt
+            The following files have been modified:
+            - modified.txt
+            The following files have been renamed:
+            - to_rename.txt -> renamed.txt
+            The following files have been deleted:
+            - deleted.txt
+        """)

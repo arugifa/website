@@ -1,26 +1,29 @@
 """Collection of helpers to execute command-line tools."""
 
-import os
-from contextlib import contextmanager
 from functools import partial
-from pathlib import Path
 from subprocess import run
-from typing import Callable, ContextManager
+from typing import Callable
 
 from website.exceptions import CommandLineError
 
 
 class BaseCommandLine:
-    """Base class for running command lines.
+    """Base class to run command lines for a specific program.
 
     Commands are executed with :func:`subprocess.run` by default.
 
     :param shell:
-        alternative to :func:`subprocess.run`, with a similar API.
-        Commands to execute are given to this function as strings and not lists.
-        Also, when commands exit with a nonzero status code, the function should
-        not fail silently, but raises an exception instead.
-    """  # noqa: E501
+        alternative to :func:`subprocess.run`, with a similar API. Commands to
+        execute are given to this function as strings and not lists. Also, when
+        commands exit with a nonzero status code, the function should not fail
+        silently, but raises an exception instead.
+
+    :raise OSError:
+        if :attr:`program` is not installed on the machine.
+    """
+
+    #: Name of the program's binary to execute.
+    program: str = None
 
     def __init__(self, shell: Callable = None):
         self.shell = shell or partial(
@@ -31,21 +34,28 @@ class BaseCommandLine:
             text=True,  # Decode stdout and stderr
         )
 
-    @contextmanager
-    def cwd(self, path: Path) -> ContextManager:
-        """Temporarily change the current working directory to ``path``."""
-        cwd = os.getcwd()
+        if not self.is_installed():
+            raise OSError(f"{self.program.title()} binary not found")
 
+    def is_installed(self) -> bool:
+        """Check if the program is installed on the machine."""
         try:
-            os.chdir(path)
-        finally:
-            os.chdir(cwd)
+            self.shell(f'which {self.program}')
+        except Exception:
+            return False
 
-    def run(self, cmdline: str) -> str:
+        return True
+
+    def run(self, options: str) -> str:
         """Run a command, using :attr:`shell`, and return its result.
 
-        :raise ~.CommandLineError: when something wrong happens.
+        :param options:
+            arguments to append to :attr:`program` on the command line.
+        :raise ~.CommandLineError:
+            when something wrong happens.
         """
+        cmdline = f'{self.program} {options}'
+
         try:
             return self.shell(cmdline).stdout
         except Exception as exc:

@@ -17,6 +17,7 @@ from website.test.integration import (
     Shell)
 from website.test.pytest import FixtureMarker
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
+from website.utils.git import Repository
 
 here = Path(__file__).parent.resolve()
 integration_test = FixtureMarker()
@@ -136,10 +137,10 @@ def fixtures(request, tmp_path_factory):
     return FileFixtureCollection(directory, request, symlinks)
 
 
-@pytest.fixture(params=[RunStub, RunReal])
+@pytest.fixture(scope='session')
 @integration_test
-def git(request):
-    return request.param()
+def git():
+    return Repository
 
 
 @pytest.fixture

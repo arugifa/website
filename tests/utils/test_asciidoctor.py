@@ -1,21 +1,17 @@
+from functools import partial
+
 import pytest
 
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
 
+from tests.utils._test_utils import BaseCommandLineTest  # noqa: I100
 
-class TestAsciidoctorToHTMLConverter:
-    # Initialize Asciidoctor.
 
-    def test_asciidoctor_not_installed(self, shell):
-        def asciidoctor_not_installed():
-            raise Exception("Binary not found")
+class TestAsciidoctorToHTMLConverter(BaseCommandLineTest):
 
-        shell.result = asciidoctor_not_installed
-
-        with pytest.raises(OSError) as excinfo:
-            AsciidoctorToHTMLConverter(shell)
-
-        assert "binary not found" in str(excinfo.value)
+    @pytest.fixture(scope='class')
+    def default(self, asciidoctor):
+        return partial(AsciidoctorToHTMLConverter)
 
     # Open document.
 

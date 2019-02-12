@@ -1,4 +1,5 @@
 from pathlib import PurePath
+from typing import ClassVar
 
 import pytest
 
@@ -6,7 +7,7 @@ from website import config
 
 
 class BaseTestConfig:
-    config_class = None
+    config_class: ClassVar[config.DefaultConfig] = None
 
     def test_can_overwritte_default_settings(self, monkeypatch):
         monkeypatch.setattr(

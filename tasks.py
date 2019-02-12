@@ -102,7 +102,7 @@ def update(ctx, db, repository, commit='HEAD~1', force=False):
     # Get list of modified documents in the repository.
     invoke_shell = partial(ctx.run, hide='stdout')
     repository = Repository(repository, shell=invoke_shell)
-    diff = repository.diff(commit, display=True)
+    diff = repository.diff(commit, quiet=False)
 
     if not force:
         confirm()
