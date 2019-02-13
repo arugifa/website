@@ -1,3 +1,54 @@
+from pathlib import PurePath
+
+import pytest
+
+from website import exceptions
+from website.content import BaseDocumentHandler, ContentManager
+
+
+class TestContentManager:
+
+    @pytest.fixture(scope='class')
+    def content(self):
+        class TestingHandler(BaseDocumentHandler):
+            def process(self, document):
+                return document
+
+        directory = PurePath('/content')
+        handlers = {'blog': TestingHandler}
+        return ContentManager(directory, handlers)
+
+    # Get handler.
+
+    def test_get_handler(self, content):
+        document = content.directory / 'blog/2019/article.adoc'
+        handler = content.get_handler(document)
+        assert handler.__class__ is content.handlers['blog']
+
+    def test_get_handler_with_relative_path(self, content):
+        document = PurePath('blog/article.adoc')
+        handler = content.get_handler(document)
+        assert handler.__class__ is content.handlers['blog']
+
+    def test_get_missing_handler(self, content):
+        document = content.directory / 'reviews/article.adoc'
+
+        with pytest.raises(exceptions.HandlerNotFound):
+            content.get_handler(document)
+
+    def test_document_not_stored_in_content_directory(self, content):
+        document = PurePath('/void/article.adoc')
+
+        with pytest.raises(exceptions.InvalidDocumentLocation):
+            content.get_handler(document)
+
+    def test_document_not_categorized(self, content):
+        document = content.directory / 'article.adoc'
+
+        with pytest.raises(exceptions.DocumentNotCategorized):
+            content.get_handler(document)
+
+
 """
 
 # Main API Tests

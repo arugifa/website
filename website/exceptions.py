@@ -85,10 +85,6 @@ class DocumentNotCategorized(InvalidDocumentLocation):
     pass
 
 
-class DocumentNotVersioned(InvalidDocumentLocation):
-    pass
-
-
 # ...
 
 class CommandLineError(WebsiteException):

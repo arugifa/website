@@ -47,16 +47,19 @@ class ContentManager:
         """Update documents in database.
 
         :param changes:
-            ``added``, ``modified``, ``renamed`` and ``deleted`` document paths.
+            source file paths of ``added``, ``modified``, ``renamed`` and
+            ``deleted`` document.
 
         :raise ~.ItemAlreadyExisting:
             when trying to create documents already existing in database.
         :raise ~.ItemNotFound:
             when trying to modify documents not existing in database.
+        :raise ~.InvalidDocumentLocation:
+            when a source file is stored in the wrong directory.
 
         :return:
             newly created or updated documents.
-        """  # noqa: E501
+        """
         added = self.add(changes['added'])
         modified = self.modify(changes['modified'])
         renamed = self.rename(changes['renamed'])
@@ -68,14 +71,21 @@ class ContentManager:
     def add(self, new: Iterable[Path]) -> List[Document]:
         """Insert new documents into database.
 
-        :param new: document paths.
-        :raise ~.ItemAlreadyExisting: if a document already exists in database.
-        :return: newly created documents.
+        :param new:
+            paths of documents source files.
+
+        :raise ~.ItemAlreadyExisting:
+            if a document already exists in database.
+        :raise ~.InvalidDocumentLocation:
+            when a source file is stored in the wrong directory.
+
+        :return:
+            newly created documents.
         """
         documents = []
 
         for src in new:
-            # Can raise ItemAlreadyExisting.
+            # Can raise ItemNotFound or InvalidDocumentLocation.
             document = self.get_handler(src).insert()
             documents.add(document)
 
@@ -84,14 +94,22 @@ class ContentManager:
     def modify(self, existing: Iterable[Path]) -> List[Document]:
         """Update existing documents in database.
 
-        :param existing: document paths.
-        :raise ~.ItemNotFound: if a document doesn't exist in database.
-        :return: updated documents.
+        :param existing:
+            paths of documents source files.
+
+        :raise ~.ItemNotFound:
+            if a document doesn't exist in database.
+        :raise ~.InvalidDocumentLocation:
+            when a source file is stored in the wrong directory.
+
+        :return:
+            updated documents.
         """
         documents = []
 
         for src in existing:
-            document = self.get_handler(src).update()  # Can raise ItemNotFound
+            # Can raise ItemNotFound or InvalidDocumentLocation.
+            document = self.get_handler(src).update()
             documents.add(document)
 
         return documents
@@ -100,13 +118,12 @@ class ContentManager:
         """Rename and update existing documents in database.
 
         :param existing:
-            document paths.
+            paths of documents source files.
 
-        :raise ~.DocumentCategoryChanged:
-            when a document has been moved to a new subfolder
-            inside :attr:`directory`.
         :raise ~.ItemNotFound:
             if a document doesn't exist in database.
+        :raise ~.InvalidDocumentLocation:
+            when a source file is stored in the wrong directory.
 
         :return:
             updated documents.
@@ -122,7 +139,8 @@ class ContentManager:
             except AssertionError:
                 raise exceptions.DocumentCategoryChanged(src, dst)
 
-            document = src_handler.rename(dst)  # Can raise ItemNotFound
+            # Can raise ItemNotFound or InvalidDocumentLocation.
+            document = src_handler.rename(dst)
             documents.add(document)
 
         return documents
@@ -130,15 +148,21 @@ class ContentManager:
     def delete(self, removed: Iterable[Path]) -> None:
         """Delete documents from database.
 
-        :param removed: document paths.
-        :raise ~.ItemNotFound: if a document doesn't exist in database.
+        :param removed:
+            paths of documents source files.
+
+        :raise ~.ItemNotFound:
+            if a document doesn't exist in database.
+        :raise ~.InvalidDocumentLocation:
+            when a source file is stored in the wrong directory.
         """
         for src in removed:
-            self.get_handler(src).delete()  # Can raise ItemNotFound
+            # Can raise ItemNotFound or InvalidDocumentLocation.
+            self.get_handler(src).delete()
 
     # Helpers
 
-    def get_handler(self, document: Path) -> 'BaseDocumentHandler':
+    def get_handler(self, document: Union[Path, PurePath]) -> 'BaseDocumentHandler':  # noqa: E501
         """Return handler to process the source file of a document.
 
         :param document:
@@ -148,14 +172,16 @@ class ContentManager:
             when the source file is not located in :attr:`directory` or inside
             a subdirectory.
         """
-        try:
-            path = document.relative_to(self.directory)
-        except ValueError:
-            if document.is_absolute():
-                raise exceptions.DocumentNotVersioned(document)
+        if document.is_absolute():
+            try:
+                relative_path = document.relative_to(self.directory)
+            except ValueError:
+                raise exceptions.InvalidDocumentLocation(document)
+        else:
+            relative_path = document
 
         try:
-            category = list(path.parents)[::-1][1].name
+            category = list(relative_path.parents)[::-1][1].name
             handler = self.handlers[category]
         except IndexError:
             raise exceptions.DocumentNotCategorized(document)
