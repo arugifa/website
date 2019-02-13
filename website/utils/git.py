@@ -35,6 +35,7 @@ class Repository(BaseCommandLine):
 
     def __init__(self, path: Union[str, Path], shell: Callable = None):
         BaseCommandLine.__init__(self, shell=shell)  # Can raise OSError
+        self.path = Path(path)
         self._repo = Repo(path)
 
     @classmethod

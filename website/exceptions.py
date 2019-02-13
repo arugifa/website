@@ -69,6 +69,26 @@ class ContentUpdateException(WebsiteException):
     pass
 
 
+class HandlerNotFound(WebsiteException):
+    pass
+
+
+class InvalidDocumentLocation(WebsiteException):
+    pass
+
+
+class DocumentCategoryChanged(InvalidDocumentLocation):
+    pass
+
+
+class DocumentNotCategorized(InvalidDocumentLocation):
+    pass
+
+
+class DocumentNotVersioned(InvalidDocumentLocation):
+    pass
+
+
 # ...
 
 class CommandLineError(WebsiteException):

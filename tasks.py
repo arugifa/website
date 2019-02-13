@@ -110,11 +110,11 @@ def update(ctx, db, repository, commit='HEAD~1', force=False):
     # Update documents in database.
     handlers = {'blog': ArticleHandler}
     reader = AsciidoctorToHTMLConverter(invoke_shell)
-    content = ContentManager(handlers, reader)
+    content = ContentManager(repository.path, handlers, reader)
 
     with app.app_context():
         try:
-            content.update(repository.path, diff)
+            content.update(diff)
         except ContentUpdateException:
             _db.session.rollback()
             print("No change has been made to the database")

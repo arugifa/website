@@ -1,12 +1,11 @@
 """Main entry point to manage content of my website."""
 
-import logging
 from abc import ABC, abstractmethod
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PurePath
-from typing import Callable, ClassVar, Iterable, List, Mapping, Union
+from typing import Callable, ClassVar, Iterable, List, Mapping, Set, Union
 
 import lxml.etree
 import lxml.html
@@ -15,128 +14,155 @@ from lxml.cssselect import CSSSelector
 from website import exceptions
 from website.models import Document
 
-logger = logging.getLogger(__name__)
-
 
 @dataclass
 class ContentManager:
-    """Manage content life cycle.
+    """Manage website's content life cycle.
 
-    Content of the website is stored inside a Git repository, in order to have
-    content versionning. The structure of this repository should look like::
+    The content is organized as a set of categorized documents. For example::
 
         blog/
             2019/
                 01-31. first_article_of_the_year.adoc
                 12-31. last_article_of_the_year.adoc
 
-    Documents in this repository are loaded, processed, and finally stored,
-    updated or deleted inside the database.
+    As part of website's content update, every document is loaded, processed,
+    and finally stored, updated or deleted in the database.
 
+    :param directory:
+        path of the directory where website's content is stored.
     :param reader:
-        function to read documents in the repository.
+        function to read (and convert on the fly) documents.
     :param prompt:
-        function to interactively ask questions during documents import,
+        function to interactively ask questions during documents processing,
         when certain things cannot be completely done automatically.
     """
+
+    directory: Path
     handlers: Mapping[str, 'BaseDocumentHandler']
     reader: Callable = open
     prompt: Callable = input
 
-    def update(self, repository: Path, diff: Mapping[str, Iterable[Path]]) -> None:
-        """...
-
-        :param repository:
-            Git repository's path.
-        """
-        self.add(repository, diff['added'])
-        self.modify(repository, diff['modified'])
-        self.rename(repository, diff['renamed'])
-        self.delete(repository, diff['deleted'])
-
-    def add(self, repository: Path, paths: Iterable[Path]) -> List[Document]:
-        """Insert documents into database.
-
-        :param paths: document paths.
-        """
-        documents = []
-
-        for path in paths:
-            handler = self.get_handler(path)
-            document = handler.insert()
-            documents.add(document)
-
-        return documents
-
-    def modify(self, paths: Iterable[Path]) -> List[Document]:
+    def update(self, changes: Mapping[str, Iterable[Path]]) -> Set[Document]:
         """Update documents in database.
 
-        :param paths: document paths.
+        :param changes:
+            ``added``, ``modified``, ``renamed`` and ``deleted`` document paths.
+
+        :raise ~.ItemAlreadyExisting:
+            when trying to create documents already existing in database.
+        :raise ~.ItemNotFound:
+            when trying to modify documents not existing in database.
+
+        :return:
+            newly created or updated documents.
+        """  # noqa: E501
+        added = self.add(changes['added'])
+        modified = self.modify(changes['modified'])
+        renamed = self.rename(changes['renamed'])
+
+        self.delete(changes['deleted'])
+
+        return set(added + modified + renamed)
+
+    def add(self, new: Iterable[Path]) -> List[Document]:
+        """Insert new documents into database.
+
+        :param new: document paths.
+        :raise ~.ItemAlreadyExisting: if a document already exists in database.
+        :return: newly created documents.
         """
         documents = []
 
-        for path in paths:
-            handler = self.get_handler(path)
-            document = handler.update()
+        for src in new:
+            # Can raise ItemAlreadyExisting.
+            document = self.get_handler(src).insert()
             documents.add(document)
 
         return documents
 
-    def rename(self, paths: Iterable[Path]) -> List[Document]:
-        """Rename documents in database.
+    def modify(self, existing: Iterable[Path]) -> List[Document]:
+        """Update existing documents in database.
 
-        :param paths: document paths.
+        :param existing: document paths.
+        :raise ~.ItemNotFound: if a document doesn't exist in database.
+        :return: updated documents.
         """
         documents = []
 
-        for src, dst in paths:
+        for src in existing:
+            document = self.get_handler(src).update()  # Can raise ItemNotFound
+            documents.add(document)
+
+        return documents
+
+    def rename(self, existing: Iterable[Path]) -> List[Document]:
+        """Rename and update existing documents in database.
+
+        :param existing:
+            document paths.
+
+        :raise ~.DocumentCategoryChanged:
+            when a document has been moved to a new subfolder
+            inside :attr:`directory`.
+        :raise ~.ItemNotFound:
+            if a document doesn't exist in database.
+
+        :return:
+            updated documents.
+        """
+        documents = []
+
+        for src, dst in existing:
+            src_handler = self.get_handler(src)
+            dst_handler = self.get_handler(dst)
+
             try:
-                assert src.parent == dst.parent
+                assert src_handler.__class__ is dst_handler.__class__
             except AssertionError:
-                print(
-                    f"Cannot move {src.name} from {src.parent} to {dst.parent}: "  # noqa: E501
-                    "it should stay in the same top-level directory")
-                raise
+                raise exceptions.DocumentCategoryChanged(src, dst)
 
-            src = src.relative_to(self.repository.path)
-            dst = dst.relative_to(self.repository.path)
-            handler = self.get_handler(src)
-            document = handler.rename(dst)
+            document = src_handler.rename(dst)  # Can raise ItemNotFound
             documents.add(document)
 
         return documents
 
-    def delete(self, paths: Iterable[Path]) -> None:
+    def delete(self, removed: Iterable[Path]) -> None:
         """Delete documents from database.
 
-        :param paths: document paths.
+        :param removed: document paths.
+        :raise ~.ItemNotFound: if a document doesn't exist in database.
         """
-        for path in paths:
-            handler = self.get_handler(path)
-            handler.delete()
+        for src in removed:
+            self.get_handler(src).delete()  # Can raise ItemNotFound
 
     # Helpers
 
-    def get_handler(self, repository: Path, document: Path) -> 'BaseDocumentHandler':
-        """Return handler to process a document.
+    def get_handler(self, document: Path) -> 'BaseDocumentHandler':
+        """Return handler to process the source file of a document.
 
-        :param file_path:
-            document's path, relative to its Git repository
-            (e.g., <CATEGORY>/<YEAR>/<MONTH>-<DAY>.<URI>.<EXTENSION>).
+        :param document:
+            path of the document's source file.
 
-        :raise KeyError:
-            when no handler is found.
+        :raise InvalidDocumentLocation:
+            when the source file is not located in :attr:`directory` or inside
+            a subdirectory.
         """
         try:
-            category = document.parents[0].name
-            handler = self.handlers[category]
-        except KeyError:
-            error = "No callback defined for %s"
-            logger.error(error, document)
-            raise KeyError(error % document)
+            path = document.relative_to(self.directory)
+        except ValueError:
+            if document.is_absolute():
+                raise exceptions.DocumentNotVersioned(document)
 
-        path = repository / document
-        return handler(path, self.reader, self.prompt)
+        try:
+            category = list(path.parents)[::-1][1].name
+            handler = self.handlers[category]
+        except IndexError:
+            raise exceptions.DocumentNotCategorized(document)
+        except KeyError:
+            raise exceptions.HandlerNotFound(document)
+
+        return handler(document, self.reader, self.prompt)
 
 
 # Document Processing
@@ -146,9 +172,9 @@ class BaseDocumentHandler(ABC):
     """Manage the life cycle of a document in database.
 
     :param path:
-        path of the document's source file, relative to its repository.
-        Every document must be written in HTML, and respect a naming
-        convention. See documentation of handler subclasses for more info.
+        path of the document's source file. Every document must be written in
+        HTML, and respect a naming convention. See documentation of handler
+        subclasses for more info.
     :param reader:
         function to read the documents.
     :param prompt:
@@ -181,14 +207,17 @@ class BaseDocumentHandler(ABC):
         """Update document in database.
 
         :param uri:
-            URI the document currently has in database.
+            URI the document currently has in database. If not provided, the
+            URI will be retrieved from the document's :attr:`path`.
         :param create:
             create the document if it doesn't exist yet in database.
         :return:
-            the updated document.
+            the updated (or newly created) document.
 
         :raise ~.ItemNotFound:
             if the document cannot be found, and ``create`` is set to ``False``.
+        :raise ~.ItemAlreadyExisting:
+            if ``create`` is set to ``True``, but the document already exists.
         """  # noqa: E501
         if create:
             uri = self.scan_uri()
@@ -258,6 +287,8 @@ class BaseDocumentHandler(ABC):
         """  # noqa: E501
 
     # Path Scanners
+    # Always process paths from right to left,
+    # to be able to process absolute or relative paths.
 
     def scan_uri(self) -> str:
         """Return document's URI, based on its :attr:`path`."""
