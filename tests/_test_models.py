@@ -1,8 +1,9 @@
 import re
+from datetime import date
 
 import pytest
 
-from website.exceptions import MultipleResultsFound
+from website import exceptions
 
 
 @pytest.mark.usefixtures('db')
@@ -56,11 +57,18 @@ class BaseTestModel:
 
         assert actual == expected
 
-    def test_find_unexisting_item(self):
-        assert self.model.find(**{self.filterable_column: 'nothing'}) is None
+    def test_find_not_existing_item(self):
+        with pytest.raises(exceptions.ItemNotFound):
+            self.model.find(**{self.filterable_column: 'nothing'})
 
     def test_finding_similar_items_raises_an_exception(self):
         self.factory.create_batch(2, **{self.filterable_column: 'something'})
 
-        with pytest.raises(MultipleResultsFound):
+        with pytest.raises(exceptions.MultipleItemsFound):
             self.model.find(**{self.filterable_column: 'something'})
+
+
+class BaseTestDocumentModel(BaseTestModel):
+    def test_default_publication_date(self):
+        document = self.factory(publication_date=None)
+        assert document.publication_date == date.today()

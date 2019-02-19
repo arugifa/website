@@ -35,6 +35,7 @@ class TestArticleHandler(BaseDocumentHandlerTest):
         article = self.handler(document, prompt=prompt).insert()
 
         assert article.uri == 'insert'
+        assert article.last_update is None
         self.assert_article_has_been_saved(article)
 
     def assert_article_has_been_saved(self, article):
@@ -65,6 +66,8 @@ class TestArticleHandler(BaseDocumentHandlerTest):
         assert article.tags[1].name == "Funk"
         assert article.tags[2].uri == "house"
         assert article.tags[2].name == "House"
+
+        assert article.publication_date == date.today()
 
     def test_insert_already_existing_document(self, db, document):
         ArticleFactory(uri='existing')

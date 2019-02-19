@@ -1,6 +1,7 @@
 """Base classes to be inherited from by models all over the website."""
 
 from collections.abc import Iterable
+from datetime import date
 from typing import List, Optional
 
 import sqlalchemy.exc as sql_errors
@@ -80,3 +81,5 @@ class Document(BaseModel):
     __abstract__ = True
 
     uri = db.Column(db.String, unique=True, nullable=False)
+    publication_date = db.Column(db.Date, default=date.today, nullable=False)
+    last_update = db.Column(db.Date)

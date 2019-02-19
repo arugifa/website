@@ -1,18 +1,15 @@
 from datetime import date, timedelta
 
 from website.blog import factories, models
-from website.test.models import BaseTestModel
+
+from tests._test_models import BaseTestDocumentModel, BaseTestModel  # noqa: E501, I100
 
 
-class TestArticleModel(BaseTestModel):
+class TestArticleModel(BaseTestDocumentModel):
     factory = factories.ArticleFactory
     model = models.Article
     optional_fields = ['last_update', 'publication_date']
     filterable_column = 'title'
-
-    def test_default_publication_date(self):
-        document = self.factory(publication_date=None)
-        assert document.publication_date == date.today()
 
     def test_retrieve_latest_articles(self):
         today = date.today()

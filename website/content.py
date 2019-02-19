@@ -5,7 +5,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PurePath
-from typing import Callable, ClassVar, Iterable, List, Mapping, Set, Union
+from typing import Callable, ClassVar, Iterable, List, Mapping, Tuple, Union
 
 import lxml.etree
 import lxml.html
@@ -43,7 +43,7 @@ class ContentManager:
     reader: Callable = open
     prompt: Callable = input
 
-    def update(self, changes: Mapping[str, Iterable[Path]]) -> Set[Document]:
+    def update(self, changes: Mapping[str, Iterable[Path]]) -> List[Document]:
         """Update documents in database.
 
         :param changes:
@@ -55,7 +55,7 @@ class ContentManager:
         :raise ~.ItemNotFound:
             when trying to modify documents not existing in database.
         :raise ~.InvalidDocumentLocation:
-            when a source file is stored in the wrong directory.
+            when a source file is stored in a wrong directory.
 
         :return:
             newly created or updated documents.
@@ -66,7 +66,7 @@ class ContentManager:
 
         self.delete(changes['deleted'])
 
-        return set(added + modified + renamed)
+        return added + modified + renamed
 
     def add(self, new: Iterable[Path]) -> List[Document]:
         """Insert new documents into database.
@@ -76,8 +76,10 @@ class ContentManager:
 
         :raise ~.ItemAlreadyExisting:
             if a document already exists in database.
+        :raise ~.HandlerNotFound:
+            if a document doesn't have any handler defined in :attr:`handlers`.
         :raise ~.InvalidDocumentLocation:
-            when a source file is stored in the wrong directory.
+            when a source file is stored in a wrong directory.
 
         :return:
             newly created documents.
@@ -85,9 +87,10 @@ class ContentManager:
         documents = []
 
         for src in new:
-            # Can raise ItemNotFound or InvalidDocumentLocation.
+            # Can raise:
+            # HandlerNotFound, ItemAlreadyExisting, InvalidDocumentLocation.
             document = self.get_handler(src).insert()
-            documents.add(document)
+            documents.append(document)
 
         return documents
 
@@ -99,8 +102,10 @@ class ContentManager:
 
         :raise ~.ItemNotFound:
             if a document doesn't exist in database.
+        :raise ~.HandlerNotFound:
+            if a document doesn't have any handler defined in :attr:`handlers`.
         :raise ~.InvalidDocumentLocation:
-            when a source file is stored in the wrong directory.
+            when a source file is stored in a wrong directory.
 
         :return:
             updated documents.
@@ -108,22 +113,24 @@ class ContentManager:
         documents = []
 
         for src in existing:
-            # Can raise ItemNotFound or InvalidDocumentLocation.
+            # Can raise HandlerNotFound, ItemNotFound, InvalidDocumentLocation.
             document = self.get_handler(src).update()
-            documents.add(document)
+            documents.append(document)
 
         return documents
 
-    def rename(self, existing: Iterable[Path]) -> List[Document]:
+    def rename(self, existing: Iterable[Tuple[Path, Path]]) -> List[Document]:
         """Rename and update existing documents in database.
 
         :param existing:
-            paths of documents source files.
+            previous and new paths of documents source files.
 
         :raise ~.ItemNotFound:
             if a document doesn't exist in database.
+        :raise ~.HandlerNotFound:
+            if a document doesn't have any handler defined in :attr:`handlers`.
         :raise ~.InvalidDocumentLocation:
-            when a source file is stored in the wrong directory.
+            when a source file is stored in a wrong directory.
 
         :return:
             updated documents.
@@ -131,6 +138,7 @@ class ContentManager:
         documents = []
 
         for src, dst in existing:
+            # Can raise HandlerNotFound or ItemNotFound.
             src_handler = self.get_handler(src)
             dst_handler = self.get_handler(dst)
 
@@ -139,9 +147,8 @@ class ContentManager:
             except AssertionError:
                 raise exceptions.DocumentCategoryChanged(src, dst)
 
-            # Can raise ItemNotFound or InvalidDocumentLocation.
-            document = src_handler.rename(dst)
-            documents.add(document)
+            document = src_handler.rename(dst)  # Can raise ItemNotFound
+            documents.append(document)
 
         return documents
 
@@ -153,11 +160,13 @@ class ContentManager:
 
         :raise ~.ItemNotFound:
             if a document doesn't exist in database.
+        :raise ~.HandlerNotFound:
+            if a document doesn't have any handler defined in :attr:`handlers`.
         :raise ~.InvalidDocumentLocation:
-            when a source file is stored in the wrong directory.
+            when a source file is stored in a wrong directory.
         """
         for src in removed:
-            # Can raise ItemNotFound or InvalidDocumentLocation.
+            # Can raise HandlerNotFound, ItemNotFound, InvalidDocumentLocation.
             self.get_handler(src).delete()
 
     # Helpers
@@ -168,9 +177,12 @@ class ContentManager:
         :param document:
             path of the document's source file.
 
-        :raise InvalidDocumentLocation:
-            when the source file is not located in :attr:`directory` or inside
-            a subdirectory.
+        :raise ~.HandlerNotFound:
+            if no handler in :attr:`handlers` is defined
+            for this type of document.
+        :raise ~.InvalidDocumentLocation:
+            when the source file is not located in :attr:`directory`
+            or inside a subdirectory.
         """
         if document.is_absolute():
             try:

@@ -1,6 +1,5 @@
 """Blog models."""
 
-from datetime import date
 from typing import Iterator
 
 from sqlalchemy import func
@@ -28,9 +27,6 @@ class Article(Document):
     lead = db.Column(db.String, nullable=False)
     body = db.Column(db.Text, nullable=False)
 
-    publication_date = db.Column(db.Date, default=date.today, nullable=False)
-    last_update = db.Column(db.Date)
-
     category = db.relationship('Category', back_populates='articles')
     tags = db.relationship(
         'Tag', order_by='Tag.uri',
@@ -48,7 +44,7 @@ class Article(Document):
         return cls.query.order_by(cls.publication_date.desc(), cls.id.desc())
 
     def exists(self) -> bool:
-        """Check if an article with the same :attr:`uri` already exists in database."""
+        """Check if an article with the same :attr:`uri` already exists."""
         # Thx to https://stackoverflow.com/a/41951905/2987526
         article = Article.query.filter_by(uri=self.uri)
         return db.session.query(article.exists()).scalar()
@@ -79,7 +75,7 @@ class Tag(BaseModel):
 
     @classmethod
     def delete_orphans(cls) -> int:
-        """Delete tags not associated with any other documents in the databse.
+        """Delete tags not associated with any other documents.
 
         :return: number of tags deleted.
         """

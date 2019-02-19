@@ -1,155 +1,213 @@
+from datetime import date
 from pathlib import PurePath
 
 import pytest
 
 from website import exceptions
-from website.content import BaseDocumentHandler, ContentManager
+from website.blog.content import ArticleHandler
+from website.blog.factories import ArticleFactory
+from website.content import ContentManager
 
 
 class TestContentManager:
 
     @pytest.fixture(scope='class')
-    def content(self):
-        class TestingHandler(BaseDocumentHandler):
-            def process(self, document):
-                return document
+    def handlers(self):
+        return {'blog': ArticleHandler}
 
-        directory = PurePath('/content')
-        handlers = {'blog': TestingHandler}
-        return ContentManager(directory, handlers)
+    @pytest.fixture(scope='class')
+    def changes(self, fixtures):
+        article = fixtures['blog/article.html']
+
+        return {
+            'added': [article.copy('blog/to_add.html')],
+            'modified': [article.copy('blog/to_modify.html')],
+            'renamed': [(
+                article.copy('blog/to_rename.html'),
+                article.copy('blog/renamed.html'),
+            )],
+            'deleted': [article.copy('blog/to_delete')],
+        }
+
+    @pytest.fixture
+    def content(self, fixtures, handlers, prompt):
+        return ContentManager(fixtures.symlinks, handlers, prompt=prompt)
+
+    # Update content.
+
+    # TODO: Update at least 2 different kinds of documents (02/2019)
+    # Because that's how the content manager is intended to behave...
+    def test_update_content(self, changes, content, db, fixtures):
+        # Fixtures
+        to_delete = ArticleFactory(uri='to_delete')
+
+        to_modify = ArticleFactory(uri='to_modify')
+        assert to_modify.last_update is None
+
+        to_rename = ArticleFactory(uri='to_rename')
+        assert to_rename.last_update is None
+
+        # Test
+        documents = content.update(changes)
+
+        # Assertions
+        assert len(documents) == 3
+
+        assert documents[0].uri == 'to_add'
+
+        assert documents[1].uri == 'to_modify'
+        assert documents[1].last_update == date.today()
+
+        assert documents[2].uri == 'renamed'
+        assert documents[2].last_update == date.today()
+
+        assert to_delete.exists() is False
+
+    # Add documents.
+
+    # TODO: Add at least 2 documents of different kinds (02/2019)
+    # Because that's how the content manager is intended to behave...
+    def test_add_documents(self, changes, content, db):
+        documents = content.add(changes['added'])
+        assert len(documents) == 1
+        assert documents[0].uri == 'to_add'
+
+    def test_add_already_existing_document(self, changes, content, db):
+        ArticleFactory(uri='to_add')
+
+        with pytest.raises(exceptions.ItemAlreadyExisting):
+            content.add(changes['added'])
+
+    def test_add_document_with_missing_handler(self, content):
+        source = PurePath('blog_articles/article.html')
+
+        with pytest.raises(exceptions.HandlerNotFound):
+            content.add([source])
+
+    def test_add_document_stored_in_another_directory(self, content):
+        source = PurePath('/invalid/article.html')
+
+        with pytest.raises(exceptions.InvalidDocumentLocation):
+            content.add([source])
+
+    # Modify documents.
+
+    # TODO: Modify at least 2 documents of different kinds (02/2019)
+    # Because that's how the content manager is intended to behave...
+    def test_modify_documents(self, changes, content, db):
+        article = ArticleFactory(uri='to_modify')
+        assert article.last_update is None
+
+        documents = content.modify(changes['modified'])
+
+        assert len(documents) == 1
+        assert documents[0] is article
+        assert documents[0].last_update == date.today()
+
+    def test_modify_not_existing_document(self, changes, content, db):
+        with pytest.raises(exceptions.ItemNotFound):
+            content.modify(changes['modified'])
+
+    def test_modify_document_with_missing_handler(self, content):
+        source = PurePath('blog_articles/article.html')
+
+        with pytest.raises(exceptions.HandlerNotFound):
+            content.modify([source])
+
+    def test_modify_document_stored_in_another_directory(self, content):
+        source = PurePath('/invalid/article.html')
+
+        with pytest.raises(exceptions.InvalidDocumentLocation):
+            content.modify([source])
+
+    # Rename documents.
+
+    # TODO: Rename at least 2 documents of different kinds (02/2019)
+    # Because that's how the content manager is intended to behave...
+    def test_rename_documents(self, changes, content, db):
+        article = ArticleFactory(uri='to_rename')
+        assert article.last_update is None
+
+        documents = content.rename(changes['renamed'])
+
+        assert len(documents) == 1
+        assert documents[0] is article
+        assert documents[0].uri == 'renamed'
+        assert documents[0].last_update == date.today()
+
+    def test_rename_not_existing_document(self, changes, content, db):
+        with pytest.raises(exceptions.ItemNotFound):
+            content.rename(changes['renamed'])
+
+    def test_rename_document_with_missing_handler(self, content):
+        previous_path = PurePath('blog_articles/previous.html')
+        new_path = PurePath('blog_articles/new.html')
+
+        with pytest.raises(exceptions.HandlerNotFound):
+            content.rename([(previous_path, new_path)])
+
+    def test_rename_document_stored_in_another_directory(self, content):
+        previous_path = PurePath('/invalid/previous.html')
+        new_path = PurePath('/invalid/new.html')
+
+        with pytest.raises(exceptions.InvalidDocumentLocation):
+            content.rename([(previous_path, new_path)])
+
+    @pytest.mark.skip("Only one category existing for now (blog articles)")
+    def test_rename_document_with_new_category(self, content):
+        raise NotImplementedError  # Should raise DocumentCategoryChanged
+
+    # Delete documents.
+
+    # TODO: Delete at least 2 documents of different kinds (02/2019)
+    # Because that's how the content manager is intended to behave...
+    def test_delete_documents(self, changes, content, db):
+        article = ArticleFactory(uri='to_delete')
+        content.delete(changes['deleted'])
+        assert article.exists() is False
+
+    def test_delete_not_existing_document(self, changes, content, db):
+        with pytest.raises(exceptions.ItemNotFound):
+            content.delete(changes['deleted'])
+
+    def test_delete_document_with_missing_handler(self, content):
+        source = PurePath('blog_articles/article.html')
+
+        with pytest.raises(exceptions.HandlerNotFound):
+            content.delete([source])
+
+    def test_delete_document_stored_in_another_directory(self, content):
+        source = PurePath('/invalid/article.html')
+
+        with pytest.raises(exceptions.InvalidDocumentLocation):
+            content.delete([source])
 
     # Get handler.
 
     def test_get_handler(self, content):
-        document = content.directory / 'blog/2019/article.adoc'
-        handler = content.get_handler(document)
+        source = content.directory / 'blog/2019/article.html'
+        handler = content.get_handler(source)
         assert handler.__class__ is content.handlers['blog']
 
     def test_get_handler_with_relative_path(self, content):
-        document = PurePath('blog/article.adoc')
-        handler = content.get_handler(document)
+        source = PurePath('blog/article.html')
+        handler = content.get_handler(source)
         assert handler.__class__ is content.handlers['blog']
 
     def test_get_missing_handler(self, content):
-        document = content.directory / 'reviews/article.adoc'
+        source = content.directory / 'reviews/article.html'
 
         with pytest.raises(exceptions.HandlerNotFound):
-            content.get_handler(document)
+            content.get_handler(source)
 
     def test_document_not_stored_in_content_directory(self, content):
-        document = PurePath('/void/article.adoc')
+        source = PurePath('/void/article.html')
 
         with pytest.raises(exceptions.InvalidDocumentLocation):
-            content.get_handler(document)
+            content.get_handler(source)
 
     def test_document_not_categorized(self, content):
-        document = content.directory / 'article.adoc'
+        source = content.directory / 'article.html'
 
         with pytest.raises(exceptions.DocumentNotCategorized):
-            content.get_handler(document)
-
-
-"""
-
-# Main API Tests
-
-class BaseContentTest:
-    func = None
-
-    def test_no_callback_defined(self):
-        callbacks = dict()
-        paths = ['blog/article.txt']
-
-        with pytest.raises(UpdateContentException) as excinfo:
-            self.__class__.func(paths, callbacks)
-
-        assert "Cannot find callback" in str(excinfo)
-
-    def test_failed_to_process_document_with_callback(self, tmpdir):
-        # Fixtures
-        tmpdir.mkdir('blog').ensure('article.txt')
-        paths = ['blog/article.txt']
-
-        def callback(*args, **kwargs):
-            raise Exception
-
-        callbacks = {'blog': callback}
-
-        # Test
-        with tmpdir.as_cwd():
-            with pytest.raises(UpdateContentException) as excinfo:
-                self.__class__.func(paths, callbacks)
-
-            assert "Failed to" in str(excinfo)
-
-
-class BaseAddOrUpdateContentTest(BaseContentTest):
-    def test_read_unexisting_file(self):
-        callbacks = {'blog': (lambda: 'test')}
-        paths = ['blog/article.txt']
-
-        with pytest.raises(UpdateContentException) as excinfo:
-            self.__class__.func(paths, callbacks)
-
-        assert "Unable to read" in str(excinfo)
-
-
-class TestInsertDocuments(BaseAddOrUpdateContentTest):
-    func = content.insert_documents
-
-
-class TestDeleteDocuments(BaseContentTest):
-    func = content.insert_documents
-
-
-class TestRenameDocuments(BaseAddOrUpdateContentTest):
-    func = content.rename_documents
-
-
-class TestUpdateDocuments(BaseAddOrUpdateContentTest):
-    func = content.update_documents
-
-
-# Helper Tests
-
-class TestGetDocumentCallback:
-    def test_get_callback(self):
-        def expected():
-            pass
-
-        path = 'blog/article.txt'
-        callbacks = {'blog': expected, 'notes': (lambda: 'test')}
-
-        actual = content.get_document_callback(path, callbacks)
-        assert actual is expected
-
-    def test_unexisting_callback_raises_exception(self):
-        path = 'notes/note.txt'
-        callbacks = {'blog': (lambda: 'test')}
-
-        with pytest.raises(KeyError):
-            content.get_document_callback(path, callbacks)
-
-    def test_cannot_get_callback_for_documents_without_category(self):
-        path = 'article.txt'
-        with pytest.raises(KeyError):
-            content.get_document_callback(path, None)
-
-
-class TestGetDocumentCategory:
-    def get_category(self):
-        path = 'notes/note.txt'
-        actual = content.get_document_category(path)
-        assert actual == 'notes'
-
-    def test_get_category_from_path_with_date(self):
-        path = 'blog/2018/04-08.article.txt'
-        actual = content.get_document_category(path)
-        assert actual == 'blog'
-
-    def test_document_must_be_classified_in_a_directory(self):
-        path = '04-08.article.txt'
-        with pytest.raises(ValueError):
-                content.get_document_category(path)
-
-"""
+            content.get_handler(source)
