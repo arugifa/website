@@ -20,11 +20,9 @@ setup(
         'flask>=0.12',
         'flask-sqlalchemy>=2.3',
         'frozen-flask>=0.15',
+        'gitpython>=2.1',
         'lxml[cssselect]>=4.3',
         'invoke>=0.22',
-        # Rackspace SDK is not compatible with Openstack SDK 0.10
-        'openstacksdk>=0.9,<0.10',
-        'os-client-config<1.31',
-        'rackspacesdk>=0.7',
+        'openstacksdk>=0.24',
     ],
 )

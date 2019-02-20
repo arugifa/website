@@ -7,8 +7,8 @@ from hashlib import md5
 from pathlib import Path
 from typing import BinaryIO, Callable, Generator, Iterable, List, Mapping, TextIO
 
+from openstack.connection import Connection
 from openstack.exceptions import ResourceNotFound, SDKException
-from rackspace.connection import Connection
 
 from website.openstack import Container
 
@@ -20,11 +20,9 @@ class CloudManager:
 
     https://docs.openstack.org/openstacksdk/latest/user/proxies/object_store.html
     """  # noqa: E501
-    def __init__(
-            self, user: str, api_key: str, region: str, container: str,
-            cls: Callable = Connection):
+    def __init__(self, connection: Connection, container: str):
         try:
-            self._connection = cls(username=user, api_key=api_key, region=region)
+            self._connection = connection
             self._object_store = self._connection.object_store
             self._container = self.object_store.get_container_metadata(container)
         except ResourceNotFound:

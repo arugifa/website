@@ -3,7 +3,8 @@ from collections.abc import MutableMapping as AbstractMutableMapping
 from pathlib import Path
 from typing import Callable
 
-from website.compat import Container as _Container
+#from website.compat import Container as _Container
+from openstack.object_store.v1.container import Container as _Container
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +40,6 @@ class ObjectCollection(AbstractMutableMapping):
     def __setitem__(self, key: str, value: Path):
         try:
             data = value.open('rb').read()
-
-            # TODO: Can be shortened, after upgrade of OpenStackSDK to 0.10+:
-            #  object_store.upload_object(self.container, key, **value)
-            self.object_store.upload_object(container=self.container, name=key, data=data)
+            self.object_store.upload_object(self.container, key, data=data)
         except OSError as exc:
             logger.error("Couldn't read content of %s: %s", key, exc)

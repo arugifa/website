@@ -3,15 +3,15 @@ import shlex
 from pathlib import Path
 from subprocess import PIPE, run
 
+import openstack
 import pytest
 pytest.register_assert_rewrite('website.test.integration')
 import webtest
-from rackspace.connection import Connection
 
 from website import create_app, db as _db
 from website.config import TestingConfig
 from website.factories import BaseCloudFactory
-from website.stubs import CloudConnectionStub
+from website.stubs import cloud_stub_factory
 from website.test.integration import (
     CommandLine, FileFixtureCollection, InvokeStub, Prompt, RunReal, RunStub,
     Shell)
@@ -34,11 +34,11 @@ def pytest_addoption(parser):
 def pytest_generate_tests(metafunc):
     if 'cloud' in metafunc.fixturenames:
         if metafunc.module.__name__ == 'test_cloud':
-            params = [CloudConnectionStub, Connection]
+            params = [cloud_stub_factory, openstack.connect]
         else:
-            params = [CloudConnectionStub]
+            params = [cloud_stub_factory]
 
-        metafunc.parametrize('cloud_connection', params, indirect=True)
+        metafunc.parametrize('cloud_client', params, indirect=True)
 
 
 def pytest_collection_modifyitems(items):
@@ -85,24 +85,15 @@ def client(app):
 @pytest.fixture(scope='module')
 @integration_test
 def cloud_client(request):
-    username = request.config.getoption('cloud_username')
-    api_key = request.config.getoption('cloud_api_key')
-    region = request.config.getoption('cloud_region')
-    config = [username, api_key, region]
-
-    if not all(config) and request.param is Connection:
-        return pytest.skip("Cloud connection not configured")
-
-    cloud_client = BaseCloudFactory._meta.cloud
-    cloud_client.reset(username, api_key, region, cls=request.param)
-
-    return cloud_client
+    client = BaseCloudFactory._meta.cloud
+    client.reset(factory=request.param)
+    return client
 
 
 @pytest.fixture
 @integration_test
 def cloud(cloud_client):
-    yield cloud_client
+    yield cloud_client.connection
     cloud_client.clean()
 
 

@@ -5,9 +5,9 @@ from functools import partial
 from pathlib import Path
 from sys import exit
 
+import openstack
 from flask_frozen import Freezer
 from invoke import task
-from rackspace.connection import Connection as CloudConnection
 
 from website import create_app, db as _db
 from website.blog.content import ArticleHandler
@@ -16,7 +16,7 @@ from website.config import DevelopmentConfig
 from website.content import ContentManager
 from website.exceptions import ContentUpdateException
 from website.helpers import setup_demo
-from website.stubs import CloudConnectionStub
+from website.stubs import cloud_stub_factory
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
 from website.utils.git import Repository
 
@@ -29,8 +29,8 @@ FLASK_APP = here / 'manage.py'
 FROZEN_WEBSITE = here / 'frozen'
 SASS_FILE = SOURCE_CODE / 'stylesheets/main.scss'
 
-PRODUCTION = {'cloud': CloudConnection}
-TESTING = {'cloud': CloudConnectionStub}
+PRODUCTION = {'cloud': openstack.connect}
+TESTING = {'cloud': cloud_stub_factory}
 
 logging.basicConfig(format='%(message)s', level=logging.INFO)
 
@@ -125,8 +125,8 @@ def update(ctx, db, repository, commit='HEAD~1', force=False):
 # Deployment
 
 @task
-def freeze(ctx, dest=FROZEN_WEBSITE, preview=False):
-    config = DevelopmentConfig(FREEZER_DESTINATION=dest)
+def freeze(ctx, dst=FROZEN_WEBSITE, preview=False):
+    config = DevelopmentConfig(FREEZER_DESTINATION=dst)
     app = create_app(config)
     freezer = Freezer(app)
 
@@ -138,14 +138,14 @@ def freeze(ctx, dest=FROZEN_WEBSITE, preview=False):
 
 
 @task
-def deploy(ctx, user_name, api_key, region, container_name, noop=False):
+def deploy(ctx, container, noop=False):
     app = create_app(DevelopmentConfig)
     static_files = app.config['FREEZER_DESTINATION']
 
-    cloud = TESTING['cloud'] if noop else PRODUCTION['cloud']
+    cloud = TESTING['cloud']() if noop else PRODUCTION['cloud']()
 
     try:
-        website = CloudManager(user_name, api_key, region, cls=cloud)
+        website = CloudManager(cloud, container)
         website.update(static_files)
     except CloudConnectionError as exc:
         exit("Seems like there are some perturbations in the Cloud today! :o")

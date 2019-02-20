@@ -1,9 +1,13 @@
-from typing import Callable, List
+from typing import Callable, List, Union
 
-from website.stubs import CloudConnectionStub
+from openstack.connection import Connection
+from openstack.object_store.v1.container import Container
+
+from website.stubs import (
+    cloud_stub_factory, CloudStubConnection, CloudStubContainer)
 
 # To not clash with PROD containers.
-TEST_CONTAINER_PREFIX = 'test'
+TEST_CONTAINERS_PREFIX = 'test'
 
 
 class CloudTestClient:
@@ -16,24 +20,24 @@ class CloudTestClient:
     """
 
     def __init__(self):
-        self.connection = None
-        self.reset('test_user', 'api_key', 'mars')
+        self.reset()
 
-    def reset(self, username, api_key, region, cls=CloudConnectionStub):
-        #self.connection = utils.connect_to_the_cloud(
-        #    username, api_key, region, cls)
-        pass
+    def reset(self, factory: Callable = cloud_stub_factory) -> Union[
+            Connection, CloudStubConnection]:
+        self.connection = factory()
 
-    def clean(self):
-        containers = filter(
-            lambda c: c.name.startswith(TEST_CONTAINER_PREFIX),
-            self.connection.object_store.containers())
+    def clean(self) -> List[Union[Container, CloudStubContainer]]:
+        containers = [
+            c for c in self.connection.object_store.containers()
+            if c.name.startswith(TEST_CONTAINERS_PREFIX)
+        ]
 
         for container in containers:
-            # XXX: list(objects) ??
-            objects = self.connection.object_store.objects(container)
+            objects = list(self.connection.object_store.objects(container))
 
             for obj in objects:
                 self.connection.object_store.delete_object(obj)
 
             self.connection.object_store.delete_container(container)
+
+        return containers
