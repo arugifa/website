@@ -1,7 +1,7 @@
 # TODO: Update docstring
 """Base classes to be inherited from by factories all over the website."""
 
-from factory import Factory, Sequence, SubFactory
+from factory import Factory, SelfAttribute, Sequence, SubFactory
 from factory.alchemy import SQLAlchemyModelFactory
 from factory.base import FactoryOptions, OptionDefault
 from openstack.object_store.v1.container import Container
@@ -71,8 +71,10 @@ class ContainerFactory(BaseCloudFactory):
 class ObjectFactory(BaseCloudFactory):
     class Meta:
         model = Object
+        exclude = ['_container']
 
-    container = SubFactory(ContainerFactory)
+    _container = SubFactory(ContainerFactory)
+    container = SelfAttribute('_container.name')
     data = b'Test Data'
     name = Sequence(lambda n: 'test_object_%d.txt' % n)
 
