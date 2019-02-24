@@ -89,3 +89,19 @@ class DocumentNotCategorized(InvalidDocumentLocation):
 
 class CommandLineError(WebsiteException):
     pass
+
+
+class CloudError(WebsiteException):
+    pass
+
+
+class CloudConnectionFailure(CloudError):
+    pass
+
+
+class ContainerNotFound(CloudError):
+    pass
+
+
+class CloudUploadError(CloudError):
+    pass

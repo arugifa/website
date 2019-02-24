@@ -38,6 +38,7 @@ class ObjectCollection(AbstractMutableMapping):
         return len(self.object_store.objects(self.container))
 
     def __setitem__(self, key: str, value: Path):
+        # TODO: Read file chunk by chunk, to not overfit memory (02/2019)
         try:
             data = value.open('rb').read()
             self.object_store.upload_object(self.container, key, data=data)

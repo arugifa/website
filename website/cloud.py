@@ -5,12 +5,16 @@ They all contain side effects and are not tested!
 import logging
 from hashlib import md5
 from pathlib import Path
-from typing import BinaryIO, Callable, Generator, Iterable, List, Mapping, TextIO
+from typing import (
+    BinaryIO, Callable, Dict, Generator, Iterable, List, Mapping, TextIO, Union)
 
-from openstack.connection import Connection
+import openstack
 from openstack.exceptions import ResourceNotFound, SDKException
+from openstack.object_store.v1.obj import Object
 
+from website import exceptions
 from website.openstack import Container
+from website.stubs import CloudStubObject
 
 logger = logging.getLogger(__name__)
 
@@ -20,20 +24,26 @@ class CloudManager:
 
     https://docs.openstack.org/openstacksdk/latest/user/proxies/object_store.html
     """  # noqa: E501
-    def __init__(self, connection: Connection, container: str):
+    def __init__(self, local_dir: Path, container: str, factory: Callable = openstack.connect):
         try:
-            self._connection = connection
-            self._object_store = self._connection.object_store
-            self._container = self.object_store.get_container_metadata(container)
-        except ResourceNotFound:
-            raise KeyError(key)
+            connection = factory()
+            self._object_store = connection.object_store
+            _container = self.get_container(container)
         except SDKException as exc:
-            logger.error("Cannot connect to the Cloud: %s", exc)
-            raise CloudConnectionError(str(exc))
+            raise exceptions.CloudConnectionFailure(exc)
 
-        self.container = Container.existing(connection=self._connection, **_container._attrs)
+        self.local_dir = local_dir
+        self.container = Container.existing(
+            connection=connection, **_container._attrs)
 
-    def update(self, src: Path) -> None:
+    def _get_container(self, name):
+        try:
+            return self._object_store.get_container_metadata(name)
+        except ResourceNotFound:
+            return self._object_store.create_container(name)
+
+
+    def update(self) -> Dict[str, List]:
         local_files = set(str(path.relative_to(src)) for path in src.rglob('*') if path.is_file())
         # set(obj.name for obj in self.object_store.objects(self.container))
         remote_files = set(obj.name for obj in self.container.objects)
@@ -47,24 +57,18 @@ class CloudManager:
         self._update(to_compare)
         self._delete(to_delete) if to_delete else logger.info("No remote file to delete")
 
-    def upload(self, src: Path, dst: str) -> Callable:
-        # TODO: Read file chunk by chunk, to not overfit memory.
+    def upload(self, src: Path, dst: str) -> Union[Object, CloudStubObject]:
         try:
-            # TODO: Can be shortened, after upgrade of OpenStackSDK to 0.10+:
-            #  object_store.upload_object(self.container, str(path), data=content)
-            # return self.object_store.upload_object(container=self.container, name=dst, data=data)
             self.container[dst] = src
         except SDKException as exc:
-            logger.error("Couldn't upload %s: %s", src, exc)
-        else:
-            logger.info("%s uploaded", src)
+            raise exceptions.CloudUploadError(exc)
 
         return self.container[dst]
 
     # Helpers
 
     @staticmethod
-    def _md5sum(src: Path) -> str:
+    def md5sum(src: Path) -> str:
         md5sum = md5()
 
         with src.open('rb') as f:
@@ -95,20 +99,17 @@ class CloudManager:
             else:
                 logger.info("%s deleted", path)
 
-    def _update(self, remote_files: Mapping[str, Path]) -> List[Callable]:
-        logger.info("Comparing existing files...")
-        updated = []
+    def refresh(self, local_files: Iterable[Path]) -> List[Path]:
+        refreshed = []
 
-        for dst, src in sorted(remote_files.items()):
-            local_hash = self._md5sum(src)
-            # remote_hash = self.object_store.get_object_metadata(dst, self.container).etag
+        for src in local_files:
+            dst = src.relative_to(self.local_dir)
+
+            local_hash = self.md5sum(src)
             remote_hash = self.container.objects[dst].etag
 
             if local_hash != remote_hash:
                 obj = self.upload(src, dst)
-                updated.add(obj)
+                refreshed.append(obj)
 
-        if not updated:
-            logger.info("No remote file to update")
-
-        return updated
+        return refreshed

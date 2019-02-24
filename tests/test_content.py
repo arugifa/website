@@ -98,7 +98,7 @@ class TestContentManager:
         article = ArticleFactory(uri='to_modify')
         assert article.last_update is None
 
-        documents = content.modify(changes['modified'])
+        documents = content.refresh(changes['modified'])
 
         assert len(documents) == 1
         assert documents[0] is article
@@ -106,19 +106,19 @@ class TestContentManager:
 
     def test_modify_not_existing_document(self, changes, content, db):
         with pytest.raises(exceptions.ItemNotFound):
-            content.modify(changes['modified'])
+            content.refresh(changes['modified'])
 
     def test_modify_document_with_missing_handler(self, content):
         source = PurePath('blog_articles/article.html')
 
         with pytest.raises(exceptions.HandlerNotFound):
-            content.modify([source])
+            content.refresh([source])
 
     def test_modify_document_stored_in_another_directory(self, content):
         source = PurePath('/invalid/article.html')
 
         with pytest.raises(exceptions.InvalidDocumentLocation):
-            content.modify([source])
+            content.refresh([source])
 
     # Rename documents.
 

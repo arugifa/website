@@ -2,13 +2,15 @@
 
 https://docs.openstack.org/openstacksdk/latest/user/proxies/object_store.html
 """
+from contextlib import contextmanager
 from copy import copy
 from hashlib import md5
 from inspect import getmembers, isclass, isfunction, signature
 
 import openstack
 from openstack.connection import Connection
-from openstack.exceptions import NotFoundException
+from openstack.exceptions import (
+    InvalidRequest, NotFoundException, SDKException)
 from openstack.object_store.v1._proxy import Proxy as ObjectStore
 from openstack.object_store.v1.container import Container
 from openstack.object_store.v1.obj import Object
@@ -90,10 +92,58 @@ class CloudStubConnection:
 
         # TODO: test raise SDKException
 
+    # Stub Methods
+
+    def execute(self, method):
+        """Method decorator to change cloud's behavior on the fly during tests.
+
+        For example::
+
+            connection.execute(object_store.create_container)('test_container')
+
+        Used by :meth:`CloudStubResource.__getattribute__`.
+        """
+        if self._disconnected:
+            raise SDKException("Cloud has been manually unplugged")
+
+        return method
+
+    @contextmanager
+    def unplug(self):
+        """Helper to generate exceptions during tests.
+
+        For example::
+
+            with connection.unplug(), pytest.raises(SDKException):
+                object_store.create_container('test_container')
+        """
+        self._disconnected = True
+
+        try:
+            yield
+        finally:
+            self._disconnected = False
+
+
+class CloudStubResource:
+    """Base class for cloud resources using :class:`CloudStubConnection`."""
+
+    def __getattribute__(self, name):
+        attr = object.__getattribute__(self, name)
+
+        if callable(attr):
+            return self._connection.execute(attr)
+
+        return attr
+
 
 @stub(ObjectStore)
-class CloudStubObjectStore:
+class CloudStubObjectStore(CloudStubResource):
     def __init__(self, *args, **kwargs):
+        # Original attributes.
+        self._connection = kwargs['_connection']
+
+        # Stub attributes.
         self._containers = dict()
 
     # Containers
@@ -128,6 +178,9 @@ class CloudStubObjectStore:
         container_name = getattr(container, 'name', container)
         container = self._containers[container_name]
 
+        if name is None:
+            raise InvalidRequest("Request requires an ID but none was found")
+
         obj = CloudStubObject(
             container=container_name,
             name=name,
@@ -158,8 +211,12 @@ class CloudStubObjectStore:
 @stub(Container)
 class CloudStubContainer:
     def __init__(self, _synchronized=False, connection=None, **attrs):
-        self._objects = dict()
+        # Original attributes.
+        self.connection = connection
         self.name = attrs['name']
+
+        # Stub attributes.
+        self._objects = dict()
 
 
 @stub(Object)

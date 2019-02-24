@@ -1,6 +1,7 @@
 """Command-line utilities to manage my website updates and deployment."""
 
 import logging
+import sys
 from functools import partial
 from pathlib import Path
 from sys import exit
@@ -9,12 +10,11 @@ import openstack
 from flask_frozen import Freezer
 from invoke import task
 
-from website import create_app, db as _db
+from website import create_app, db as _db, exceptions
 from website.blog.content import ArticleHandler
 from website.cloud import CloudManager
 from website.config import DevelopmentConfig
 from website.content import ContentManager
-from website.exceptions import ContentUpdateException
 from website.helpers import setup_demo
 from website.stubs import cloud_stub_factory
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
@@ -138,15 +138,16 @@ def freeze(ctx, dst=FROZEN_WEBSITE, preview=False):
 
 
 @task
-def deploy(ctx, container, noop=False):
-    app = create_app(DevelopmentConfig)
-    static_files = app.config['FREEZER_DESTINATION']
-
-    cloud = TESTING['cloud']() if noop else PRODUCTION['cloud']()
+def deploy(ctx, website=FROZEN_WEBSITE, container='website', noop=False):
+    environment = TESTING['cloud'] if noop else PRODUCTION['cloud']
 
     try:
-        website = CloudManager(cloud, container)
-        website.update(static_files)
+        cloud = CloudManager(website, container, environment)
+    except exceptions.CloudConnectionFailure as exc:
+        sys.exit(f"Cannot connect to the Cloud: {exc}")
+
+    try:
+        cloud.update()
     except CloudConnectionError as exc:
         exit("Seems like there are some perturbations in the Cloud today! :o")
 

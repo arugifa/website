@@ -33,7 +33,7 @@ def pytest_addoption(parser):
 
 def pytest_generate_tests(metafunc):
     if 'cloud' in metafunc.fixturenames:
-        if metafunc.module.__name__ == 'test_cloud':
+        if metafunc.module.__name__ == 'test_stubs':
             params = [cloud_stub_factory, openstack.connect]
         else:
             params = [cloud_stub_factory]

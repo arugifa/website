@@ -61,7 +61,7 @@ class ContentManager:
             newly created or updated documents.
         """
         added = self.add(changes['added'])
-        modified = self.modify(changes['modified'])
+        modified = self.refresh(changes['modified'])
         renamed = self.rename(changes['renamed'])
 
         self.delete(changes['deleted'])
@@ -94,7 +94,7 @@ class ContentManager:
 
         return documents
 
-    def modify(self, existing: Iterable[Path]) -> List[Document]:
+    def refresh(self, existing: Iterable[Path]) -> List[Document]:
         """Update existing documents in database.
 
         :param existing:
