@@ -99,9 +99,13 @@ class CloudConnectionFailure(CloudError):
     pass
 
 
-class ContainerNotFound(CloudError):
+class CloudContainerNotFound(CloudError):
     pass
 
 
 class CloudUploadError(CloudError):
+    pass
+
+
+class CloudFileNotFound(CloudError):
     pass

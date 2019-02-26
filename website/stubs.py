@@ -10,7 +10,7 @@ from inspect import getmembers, isclass, isfunction, signature
 import openstack
 from openstack.connection import Connection
 from openstack.exceptions import (
-    InvalidRequest, NotFoundException, SDKException)
+    InvalidRequest, NotFoundException, ResourceNotFound, SDKException)
 from openstack.object_store.v1._proxy import Proxy as ObjectStore
 from openstack.object_store.v1.container import Container
 from openstack.object_store.v1.obj import Object
@@ -21,7 +21,7 @@ def fqin(obj):
     return f'{obj.__module__}.{obj.__qualname__}'
 
 
-def stub(original):
+def stub(original, classified=False):
     """Check that stub signatures are up-to-date.
 
     The main purpose is to avoid bugs to sneak in the codebase. This can
@@ -34,6 +34,13 @@ def stub(original):
     In this case, if the signature of function/methods tested changes (e.g.,
     when upgrading their library), then the interface tests would remain GREEN,
     but the codebase would miserably crashes when shipped into production.
+
+    :param classified:
+        set to ``True`` when using an instance method to make a function stub.
+        This will remove the ``self`` attribute from the stub signature,
+        so both the stub method and the original function have the same
+        signature. Using methods is useful to generate side effects on the fly,
+        depending on the stub instance attributes.
     """
     def wrapper(obj):
         try:
@@ -44,16 +51,24 @@ def stub(original):
                 original_signature = signature(original)
                 stub_signature = signature(obj)
 
+                if classified:
+                    original_parameters = filter(
+                        lambda p: p.name != 'self',
+                        signature(obj).parameters.values(),
+                    )
+                    stub_signature = stub_signature.replace(
+                        parameters=original_parameters)
+
                 assert stub_signature == original_signature
 
             elif isclass(obj):
-                methods = getmembers(obj, isfunction)
+                def is_method(attr):
+                    return isfunction(attr) and attr.__name__ in original.__dict__  # noqa: E501
+
+                methods = getmembers(obj, is_method)
 
                 for name, stub_method in methods:
                     original_method = getattr(original, name)
-
-                    if not original_method:
-                        continue
 
                     original_fqin = fqin(original_method)
                     stub_fqin = fqin(stub_method)
@@ -62,6 +77,10 @@ def stub(original):
                     stub_signature = signature(stub_method)
 
                     assert stub_signature == original_signature
+
+            else:
+                error = f"{stub_fqin} should be either a class or a function"
+                raise TypeError(error)
 
         except AssertionError:
             error = (
@@ -75,11 +94,41 @@ def stub(original):
     return wrapper
 
 
-@stub(openstack.connect)
-def cloud_stub_factory(
-        cloud=None, app_name=None, app_version=None, options=None,
-        load_yaml_config=True, load_envvars=True, **kwargs):
-    return CloudStubConnection()
+class NetworkStub:
+    def __init__(self):
+        self.disconnected = False
+
+    @contextmanager
+    def unplug(self):
+        """Simulate a network outage to generate exceptions during tests.
+
+        For example::
+
+            with network.unplug(), pytest.raises(SDKException):
+                object_store.create_container('test_container')
+        """
+        self.disconnected = True
+
+        try:
+            yield
+        finally:
+            self.disconnected = False
+
+
+class CloudStubConnectionFactory:
+    def __init__(self, network=None):
+        self.network = network or NetworkStub()
+
+    @stub(openstack.connect, classified=True)
+    def __call__(
+            self, cloud=None, app_name=None, app_version=None, options=None,
+            load_yaml_config=True, load_envvars=True, **kwargs):
+        if self.network.disconnected:
+            raise SDKException("A network outage has been manually triggered")
+
+        connection = CloudStubConnection()
+        connection._network = self.network
+        return connection
 
 
 @stub(Connection)
@@ -88,9 +137,11 @@ class CloudStubConnection:
             self, cloud=None, config=None, session=None, app_name=None,
             app_version=None, extra_services=None, strict=False,
             use_direct_get=False, task_manager=None, rate_limit=None, **kwargs):  # noqa: E501
-        self.object_store = CloudStubObjectStore()
+        # Original attributes.
+        self.object_store = CloudStubObjectStore(_connection=self)
 
-        # TODO: test raise SDKException
+        # Stub Attributes.
+        self._network = None  # Must be manually assigned after instantiation
 
     # Stub Methods
 
@@ -103,26 +154,10 @@ class CloudStubConnection:
 
         Used by :meth:`CloudStubResource.__getattribute__`.
         """
-        if self._disconnected:
-            raise SDKException("Cloud has been manually unplugged")
+        if self._network.disconnected:
+            raise SDKException("Network has been manually unplugged")
 
         return method
-
-    @contextmanager
-    def unplug(self):
-        """Helper to generate exceptions during tests.
-
-        For example::
-
-            with connection.unplug(), pytest.raises(SDKException):
-                object_store.create_container('test_container')
-        """
-        self._disconnected = True
-
-        try:
-            yield
-        finally:
-            self._disconnected = False
 
 
 class CloudStubResource:
@@ -176,7 +211,6 @@ class CloudStubObjectStore(CloudStubResource):
 
     def upload_object(self, container, name, **attrs):
         container_name = getattr(container, 'name', container)
-        container = self._containers[container_name]
 
         if name is None:
             raise InvalidRequest("Request requires an ID but none was found")
@@ -186,14 +220,30 @@ class CloudStubObjectStore(CloudStubResource):
             name=name,
             data=attrs['data'],
         )
-        container._objects[name] = obj
+        self._containers[container_name]._objects[name] = obj
+
         return obj
+
+    def download_object(self, obj, container=None, **attrs):
+        if isinstance(obj, CloudStubObject):
+            return self._containers[obj.container]._objects[obj.name]._data
+
+        container_name = getattr(container, 'name', container)
+
+        try:
+            return self._containers[container_name]._objects[obj]._data
+        except KeyError:
+            raise ResourceNotFound("404: Client Error")
 
     def get_object(self, obj, container=None):
         if isinstance(obj, CloudStubObject):
             return self._containers[obj.container]._objects[obj.name]
 
-        metadata = copy(self._containers[container]._objects[obj])
+        try:
+            metadata = copy(self._containers[container]._objects[obj])
+        except KeyError:
+            raise NotFoundException
+
         metadata.name = None
         metadata.data = None
 
@@ -203,9 +253,16 @@ class CloudStubObjectStore(CloudStubResource):
         return self.get_object(obj, container)
 
     def delete_object(self, obj, ignore_missing=True, container=None):
-        container = container or obj.container
-        name = getattr(obj, 'name', obj)
-        del self._containers[container]._objects[name]
+        try:
+            if isinstance(obj, CloudStubObject):
+                del self._containers[obj.container]._objects[obj.name]
+
+            else:
+                container_name = getattr(container, 'name', container)
+                del self._containers[container_name]._objects[obj]
+
+        except KeyError:
+            raise ResourceNotFound
 
 
 @stub(Container)
@@ -226,8 +283,8 @@ class CloudStubObject:
 
         self.container = attrs['container']
         self.name = attrs['name']
-        self.data = data
+        self.data = self._data = data
 
     @property
     def etag(self):
-        return md5(self.data).hexdigest()
+        return md5(self._data).hexdigest()

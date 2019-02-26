@@ -43,6 +43,8 @@ class ContentManager:
     reader: Callable = open
     prompt: Callable = input
 
+    # Main API
+
     def update(self, changes: Mapping[str, Iterable[Path]]) -> List[Document]:
         """Update documents in database.
 

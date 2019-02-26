@@ -9,9 +9,10 @@ pytest.register_assert_rewrite('website.test.integration')
 import webtest
 
 from website import create_app, db as _db
+from website.cloud import CloudFilesManager
 from website.config import TestingConfig
 from website.factories import BaseCloudFactory
-from website.stubs import cloud_stub_factory
+from website.stubs import CloudStubConnectionFactory, NetworkStub
 from website.test.integration import (
     CommandLine, FileFixtureCollection, InvokeStub, Prompt, RunReal, RunStub,
     Shell)
@@ -34,9 +35,9 @@ def pytest_addoption(parser):
 def pytest_generate_tests(metafunc):
     if 'cloud' in metafunc.fixturenames:
         if metafunc.module.__name__ == 'test_stubs':
-            params = [cloud_stub_factory, openstack.connect]
+            params = ['stub', 'original']
         else:
-            params = [cloud_stub_factory]
+            params = ['stub']
 
         metafunc.parametrize('cloud_client', params, indirect=True)
 
@@ -82,11 +83,18 @@ def client(app):
     return webtest.TestApp(app)
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture
 @integration_test
-def cloud_client(request):
+def cloud_client(network, request):
+    if request.param == 'stub':
+        connection_factory = CloudStubConnectionFactory(network)
+    elif request.param == 'original':
+        connection_factory = openstack.connect
+    else:
+        raise ValueError(request.param)
+
     client = BaseCloudFactory._meta.cloud
-    client.reset(factory=request.param)
+    client.reset(factory=connection_factory)
     return client
 
 
@@ -95,6 +103,17 @@ def cloud_client(request):
 def cloud(cloud_client):
     yield cloud_client.connection
     cloud_client.clean()
+
+
+@pytest.fixture
+def network():
+    return NetworkStub()
+
+
+@pytest.fixture
+def object_store(cloud):
+    cloud.object_store.create_container('test_files')
+    return CloudFilesManager(cloud, 'test_files')
 
 
 @pytest.fixture

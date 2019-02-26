@@ -4,6 +4,8 @@ from openstack import exceptions
 from website.test.cloud import TEST_CONTAINERS_PREFIX
 from website.factories import ContainerFactory, ObjectFactory
 
+# TODO: Test exceptions like ResourceNotFound or NotFoundException (02/2019)
+
 
 class TestObjectStore:
 
@@ -80,6 +82,27 @@ class TestObjectStore:
         assert obj.container == container.name
         assert obj.name == 'uploaded'
         assert obj.data == b'Uploaded object'
+
+    # Download object.
+
+    def test_download_object(self, cloud):
+        obj = ObjectFactory()
+        data = cloud.object_store.download_object(obj)
+        assert data == obj.data
+
+    def test_download_object_by_name(self, cloud):
+        container = ContainerFactory()
+
+        obj = ObjectFactory(container=container.name)
+        data = cloud.object_store.download_object(obj.name, container.name)
+
+        assert data == obj.data
+
+    def test_download_not_existing_object(self, cloud):
+        container = ContainerFactory()
+
+        with pytest.raises(exceptions.ResourceNotFound):
+            cloud.object_store.download_object('missing', container.name)
 
     # Get object(s).
 

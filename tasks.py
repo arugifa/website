@@ -16,7 +16,7 @@ from website.cloud import CloudManager
 from website.config import DevelopmentConfig
 from website.content import ContentManager
 from website.helpers import setup_demo
-from website.stubs import cloud_stub_factory
+from website.stubs import CloudStubConnectionFactory
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
 from website.utils.git import Repository
 
@@ -30,7 +30,7 @@ FROZEN_WEBSITE = here / 'frozen'
 SASS_FILE = SOURCE_CODE / 'stylesheets/main.scss'
 
 PRODUCTION = {'cloud': openstack.connect}
-TESTING = {'cloud': cloud_stub_factory}
+TESTING = {'cloud': CloudStubConnectionFactory}
 
 logging.basicConfig(format='%(message)s', level=logging.INFO)
 
@@ -139,15 +139,18 @@ def freeze(ctx, dst=FROZEN_WEBSITE, preview=False):
 
 @task
 def deploy(ctx, website=FROZEN_WEBSITE, container='website', noop=False):
-    environment = TESTING['cloud'] if noop else PRODUCTION['cloud']
-
     try:
-        cloud = CloudManager(website, container, environment)
+        connection = TESTING['cloud']() if noop else PRODUCTION['cloud']()
+        cloud = CloudManager(connection, container)
     except exceptions.CloudConnectionFailure as exc:
         sys.exit(f"Cannot connect to the Cloud: {exc}")
+    except exceptions.CloudContainerNotFound:
+        sys.exit(
+            f'You must manually create and configure '
+            f'the "{container}" container before deploying the website')
 
     try:
-        cloud.update()
+        cloud.update(website)
     except CloudConnectionError as exc:
         exit("Seems like there are some perturbations in the Cloud today! :o")
 

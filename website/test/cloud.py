@@ -4,7 +4,7 @@ from openstack.connection import Connection
 from openstack.object_store.v1.container import Container
 
 from website.stubs import (
-    cloud_stub_factory, CloudStubConnection, CloudStubContainer)
+    CloudStubConnection, CloudStubConnectionFactory, CloudStubContainer)
 
 # To not clash with PROD containers.
 TEST_CONTAINERS_PREFIX = 'test'
@@ -22,7 +22,7 @@ class CloudTestClient:
     def __init__(self):
         self.reset()
 
-    def reset(self, factory: Callable = cloud_stub_factory) -> Union[
+    def reset(self, factory: Callable = CloudStubConnectionFactory) -> Union[
             Connection, CloudStubConnection]:
         self.connection = factory()
 
