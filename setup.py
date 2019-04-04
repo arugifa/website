@@ -15,6 +15,7 @@ setup(
     ],
     packages=find_packages(),
     install_requires=[
+        'aiofiles>=0.4',
         'beautifulsoup4>=4.7',
         'factory_boy>=2.9',
         'flask>=0.12',
@@ -24,5 +25,6 @@ setup(
         'lxml[cssselect]>=4.3',
         'invoke>=0.22',
         'openstacksdk>=0.24',
+        'sortedcontainers>=2.1.0',
     ],
 )

@@ -11,6 +11,10 @@ class DatabaseException(WebsiteException):
     """Errors related to the database."""
 
 
+class InvalidItem(DatabaseException):
+    pass
+
+
 class MultipleItemsFound(DatabaseException):
     """Raised if several results are returned when looking for a specific item."""  # noqa: E501
 
@@ -87,10 +91,6 @@ class DocumentNotCategorized(InvalidDocumentLocation):
 
 # ...
 
-class CommandLineError(WebsiteException):
-    pass
-
-
 class CloudError(WebsiteException):
     pass
 
@@ -108,4 +108,8 @@ class CloudUploadError(CloudError):
 
 
 class CloudFileNotFound(CloudError):
+    pass
+
+
+class RepositoryNotFound(WebsiteException):
     pass

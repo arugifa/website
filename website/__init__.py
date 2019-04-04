@@ -5,7 +5,7 @@ from flask import Blueprint, Flask
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.datastructures import ImmutableDict
 
-from .config import IN_MEMORY_DATABASE
+from website.config import DevelopmentConfig, IN_MEMORY_DATABASE
 
 # Disable autoflush to have more control over objects creation.
 # Otherwise, when querying the database, SQLAlchemy can tries at the same time
@@ -14,7 +14,7 @@ db = SQLAlchemy(session_options={"autoflush": False})
 website = Blueprint('website', __name__)
 
 
-def create_app(config):
+def create_app(config=DevelopmentConfig):
     app = Flask(__name__)
 
     if inspect.isclass(config):

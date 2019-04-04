@@ -6,7 +6,7 @@ import pytest
 from website import exceptions
 from website.blog.content import ArticleHandler, ArticleSourceParser
 from website.blog.factories import ArticleFactory, CategoryFactory, TagFactory
-from website.blog.models import Article, Tag
+from website.blog.models import Article
 
 from tests._test_content import (  # noqa: I100
     BaseDocumentHandlerTest, BaseDocumentSourceParserTest)
@@ -14,9 +14,10 @@ from tests._test_content import (  # noqa: I100
 
 class TestArticleHandler(BaseDocumentHandlerTest):
     handler = ArticleHandler
+    factory = ArticleFactory
 
     @pytest.fixture
-    def document(self, fixtures):
+    def source_file(self, fixtures):
         return fixtures['blog/article.html']
 
     @pytest.fixture
@@ -30,10 +31,11 @@ class TestArticleHandler(BaseDocumentHandlerTest):
 
     # Insert article.
 
-    def test_insert_document(self, answers, db, document, prompt):
-        document.rename('blog/2019/01-31.insert.html')
-        article = self.handler(document, prompt=prompt).insert()
+    async def test_insert_document(self, answers, db, prompt, source_file):
+        source_file.move('blog/2019/01-31.insert.html')
+        article = await self.handler(source_file, prompt=prompt).insert()
 
+        assert article.exists()
         assert article.uri == 'insert'
         assert article.last_update is None
         self.assert_article_has_been_saved(article)
@@ -69,146 +71,312 @@ class TestArticleHandler(BaseDocumentHandlerTest):
 
         assert article.publication_date == date.today()
 
-    def test_insert_already_existing_document(self, db, document):
+    async def test_insert_already_existing_document(self, db, source_file):
         ArticleFactory(uri='existing')
-        document.rename('blog/2019/01-31.existing.html')
+        source_file.move('blog/2019/01-31.existing.html')
 
         with pytest.raises(exceptions.ItemAlreadyExisting):
-            self.handler(document).insert()
+            await self.handler(source_file).insert()
+
+    async def test_insert_documents_in_batch(
+            self, answers, db, prompt, source_file):
+        # Test
+        source_file_1 = source_file.symlink('blog/2019/03-08.batch_1.html')
+        handler_1 = self.handler(source_file_1, prompt=prompt)
+        article_1 = await handler_1.insert(batch=True)
+
+        source_file_2 = source_file.symlink('blog/2019/03-08.batch_2.html')
+        handler_2 = self.handler(source_file_2, prompt=prompt)
+        article_2 = await handler_2.insert(batch=True)
+
+        assert not article_1.exists()
+        assert not article_2.exists()
+
+        prompt.answer_quiz()
+        article_1.save()
+        article_2.save()
+
+        # Assertions
+        assert article_1.exists()
+        assert article_1.uri == 'batch_1'
+        assert article_1.last_update is None
+        self.assert_article_has_been_saved(article_1)
+
+        assert article_2.exists()
+        assert article_2.uri == 'batch_2'
+        assert article_2.last_update is None
+        self.assert_article_has_been_saved(article_2)
 
     # Update article.
 
-    def test_update_document(self, answers, db, document, prompt):
+    async def test_update_document(self, answers, db, prompt, source_file):
         original = ArticleFactory(
             uri='update', title="To Update",
             lead="To be updated.", body="Please update me!",
         )
         assert original.last_update is None
 
-        document.rename('blog/2019/01-31.update.html')
-        new = self.handler(document, prompt=prompt).update()
+        source_file.move('blog/2019/01-31.update.html')
+        updated = await self.handler(source_file, prompt=prompt).update()
 
-        assert new is original
-        assert new.uri == 'update'
-        assert new.last_update == date.today()
-        self.assert_article_has_been_saved(new)
+        assert updated is original
+        assert updated.uri == 'update'
+        assert updated.last_update == date.today()
+        self.assert_article_has_been_saved(updated)
 
-    def test_update_not_existing_document(self, db, document):
-        document.rename('blog/2019/01-31.missing.html')
+    async def test_update_not_existing_document(self, db, source_file):
+        source_file.move('blog/2019/01-31.missing.html')
 
         with pytest.raises(exceptions.ItemNotFound):
-            self.handler(document).update()
+            await self.handler(source_file).update()
+
+    async def test_update_documents_in_batch(
+            self, answers, db, prompt, source_file):
+        # Fixtures
+        source_file_1 = source_file.symlink('blog/2019/03-08.batch_1.html')
+        original_1 = ArticleFactory(
+            uri='batch_1', title="To Update",
+            lead="To be updated.", body="Please update me!",
+        )
+        assert original_1.last_update is None
+
+        source_file_2 = source_file.symlink('blog/2019/03-08.batch_2.html')
+        original_2 = ArticleFactory(
+            uri='batch_2', title="To Update",
+            lead="To be updated.", body="Please update me!",
+        )
+        assert original_2.last_update is None
+
+        # Test
+        handler_1 = self.handler(source_file_1, prompt=prompt)
+        updated_1 = await handler_1.update(batch=True)
+
+        assert updated_1 is original_1
+        assert updated_1.last_update is None
+
+        handler_2 = self.handler(source_file_2, prompt=prompt)
+        updated_2 = await handler_2.update(batch=True)
+
+        assert updated_2 is original_2
+        assert updated_2.last_update is None
+
+        prompt.answer_quiz()
+        updated_1.save()
+        updated_2.save()
+
+        # Assertions
+        assert updated_1 is original_1
+        assert updated_1.uri == 'batch_1'
+        assert updated_1.last_update == date.today()
+        self.assert_article_has_been_saved(updated_1)
+
+        assert updated_2 is original_2
+        assert updated_2.uri == 'batch_2'
+        assert updated_2.last_update == date.today()
+        self.assert_article_has_been_saved(updated_2)
 
     # Rename article.
 
-    def test_rename_document(self, answers, db, document, prompt):
+    async def test_rename_document(self, answers, db, prompt, source_file):
         original = ArticleFactory(
             uri='rename', title="To Rename",
             lead="To be renamed.", body="Please rename me!",
         )
         assert original.last_update is None
 
-        document.rename('blog/2019/01-31.rename.html')
-        new_path = document.copy('blog/2019/01-31.new_name.html')
-        new = self.handler(document, prompt=prompt).rename(new_path)
+        source_file.move('blog/2019/01-31.rename.html')
+        new_path = source_file.symlink('blog/2019/01-31.new_name.html')
+        handler = self.handler(source_file, prompt=prompt)
+        renamed = await handler.rename(new_path)
 
-        assert new is original
-        assert new.uri == 'new_name'
-        assert new.last_update == date.today()
-        self.assert_article_has_been_saved(new)
+        assert renamed is original
+        assert renamed.uri == 'new_name'
+        assert renamed.last_update == date.today()
+        self.assert_article_has_been_saved(renamed)
 
-    def test_rename_not_existing_document(self, db, document):
-        document.rename('blog/2019/01-31.missing.html')
+    async def test_rename_not_existing_document(self, db, source_file):
+        source_file.move('blog/2019/01-31.missing.html')
 
         with pytest.raises(exceptions.ItemNotFound):
-            self.handler(document).rename('new_name')
+            await self.handler(source_file).rename('new_name')
+
+    async def test_rename_documents_in_batch(
+            self, answers, db, prompt, source_file):
+        # Fixtures
+        source_file_1 = source_file.symlink('blog/2019/03-08.batch_1.html')
+        original_1 = ArticleFactory(
+            uri='batch_1', title="To Rename",
+            lead="To be renamed.", body="Please rename me!",
+        )
+        assert original_1.last_update is None
+
+        source_file_2 = source_file.symlink('blog/2019/03-08.batch_2.html')
+        original_2 = ArticleFactory(
+            uri='batch_2', title="To Rename",
+            lead="To be renamed.", body="Please rename me!",
+        )
+        assert original_2.last_update is None
+
+        # Test
+        new_path_1 = source_file.symlink('blog/2019/03-08.new_name_1.html')
+        handler_1 = self.handler(source_file_1, prompt=prompt)
+        renamed_1 = await handler_1.rename(new_path_1, batch=True)
+
+        assert renamed_1 is original_1
+        assert renamed_1.uri == 'new_name_1'
+        assert renamed_1.last_update is None
+
+        new_path_2 = source_file.symlink('blog/2019/03-08.new_name_2.html')
+        handler_2 = self.handler(source_file_2, prompt=prompt)
+        renamed_2 = await handler_2.rename(new_path_2, batch=True)
+
+        assert renamed_2 is original_2
+        assert renamed_2.uri == 'new_name_2'
+        assert renamed_2.last_update is None
+
+        prompt.answer_quiz()
+        renamed_1.save()
+        renamed_2.save()
+
+        # Assertions
+        assert renamed_1 is original_1
+        assert renamed_1.uri == 'new_name_1'
+        assert renamed_1.last_update == date.today()
+        self.assert_article_has_been_saved(renamed_1)
+
+        assert renamed_2 is original_2
+        assert renamed_2.uri == 'new_name_2'
+        assert renamed_2.last_update == date.today()
+        self.assert_article_has_been_saved(renamed_2)
 
     # Delete article.
 
     def test_delete_document(self, db):
         article = ArticleFactory(uri='delete')
+        source_file = PurePath('blog/2019/01-30.delete.html')
+
         assert Article.all() == [article]
 
-        document = PurePath('blog/2019/01-30.delete.html')
-        self.handler(document).delete()
+        self.handler(source_file).delete()
         assert Article.all() == []
 
     def test_delete_not_existing_document(self, db):
-        document = PurePath('blog/2019/01-30.missing.html')
+        source_file = PurePath('blog/2019/01-30.missing.html')
 
         with pytest.raises(exceptions.ItemNotFound):
-            self.handler(document).delete()
-
-    def test_orphan_tags_are_also_deleted(self, db):
-        tags = TagFactory.create_batch(2)
-        ArticleFactory(tags=tags, uri='orphan_tags')
-        assert Tag.all() == tags
-
-        document = PurePath('blog/2019/01-30.orphan_tags.html')
-        self.handler(document).delete()
-        assert Tag.all() == []
+            self.handler(source_file).delete()
 
     # Insert category.
 
-    def test_insert_not_existing_category(self, answers, db, document, prompt):
-        category = self.handler(document, prompt=prompt).insert_category()
-        assert category.uri == 'music'
-        assert category.name == 'Music'
+    async def test_insert_new_category(self, answers, db, prompt, source_file):
+        source_file.move('blog/2019/03-06.insert_category.html')
+        article = ArticleFactory(uri='insert_category')
 
-    def test_insert_already_existing_category(self, db, document):
-        expected = CategoryFactory(uri='music', name='Musika')
-        actual = self.handler(document).insert_category()
+        await self.handler(source_file, prompt=prompt).insert_category()
+
+        assert article.category.uri == 'music'
+        assert article.category.name == 'Music'
+
+    async def test_insert_existing_category(self, db, source_file):
+        source_file.move('blog/2019/03-06.insert_category.html')
+        article = ArticleFactory(uri='insert_category')
+
+        category = CategoryFactory(uri='music', name='Musika')
+        await self.handler(source_file).insert_category()
 
         # Let's be sure that attributes have not changed.
-        assert actual is expected
-        assert actual.uri == 'music'
-        assert actual.name == 'Musika'
+        assert article.category is category
+        assert category.uri == 'music'
+        assert category.name == 'Musika'
+
+    async def test_insert_category_later(
+            self, answers, db, prompt, source_file):
+        source_file.move('blog/2019/03-07.insert_category.html')
+        category = CategoryFactory()
+        article = ArticleFactory(uri='insert_category', category=category)
+
+        handler = self.handler(source_file, prompt=prompt)
+        await handler.insert_category(later=True)
+
+        assert article.category is category
+        prompt.answer_quiz()
+        assert article.category is not category
+
+        assert article.category.uri == 'music'
+        assert article.category.name == 'Music'
 
     # Insert tags.
 
-    def test_insert_not_existing_tags(self, answers, db, document, prompt):
-        tags = self.handler(document, prompt=prompt).insert_tags()
+    async def test_insert_new_tags(self, answers, db, prompt, source_file):
+        source_file.move('blog/2019/03-06.insert_tags.html')
+        article = ArticleFactory(uri='insert_tags')
 
-        assert len(tags) == 3
-        assert tags[0].uri == 'electro'
-        assert tags[0].name == 'Electro'
-        assert tags[1].uri == 'funk'
-        assert tags[1].name == 'Funk'
-        assert tags[2].uri == 'house'
-        assert tags[2].name == 'House'
+        await self.handler(source_file, prompt=prompt).insert_tags()
 
-    def test_insert_already_existing_tags(self, db, document):
+        assert len(article.tags) == 3
+        assert article.tags[0].uri == 'electro'
+        assert article.tags[0].name == 'Electro'
+        assert article.tags[1].uri == 'funk'
+        assert article.tags[1].name == 'Funk'
+        assert article.tags[2].uri == 'house'
+        assert article.tags[2].name == 'House'
+
+    async def test_insert_existing_tags(self, db, source_file):
+        source_file.move('blog/2019/03-06.insert_tags.html')
+        article = ArticleFactory(uri='insert_tags')
+
         expected = [
             TagFactory(uri='electro', name='Electrico'),
             TagFactory(uri='funk', name='Funky'),
             TagFactory(uri='house', name='Maison'),
         ]
-        actual = self.handler(document).insert_tags()
+        await self.handler(source_file).insert_tags()
 
         # Let's be sure that attributes have not changed.
-        assert len(actual) == len(expected)
-        assert actual[0].uri == 'electro'
-        assert actual[0].name == 'Electrico'
-        assert actual[1].uri == 'funk'
-        assert actual[1].name == 'Funky'
-        assert actual[2].uri == 'house'
-        assert actual[2].name == 'Maison'
+        assert len(article.tags) == len(expected)
+        assert article.tags[0].uri == 'electro'
+        assert article.tags[0].name == 'Electrico'
+        assert article.tags[1].uri == 'funk'
+        assert article.tags[1].name == 'Funky'
+        assert article.tags[2].uri == 'house'
+        assert article.tags[2].name == 'Maison'
 
-    def test_insert_tags_that_do_not_all_exist(
-            self, answers, db, document, prompt):
+    async def test_insert_tags_that_do_not_all_exist(
+            self, answers, db, prompt, source_file):
+        source_file.move('blog/2019/03-06.insert_tags.html')
+        article = ArticleFactory(uri='insert_tags')
+
         existing = TagFactory(uri='funk', name='Funky')
-        all_tags = self.handler(document, prompt=prompt).insert_tags()
+        handler = self.handler(source_file, prompt=prompt)
+        await handler.insert_tags()
 
-        assert len(all_tags) == 3
-        assert all_tags[0].uri == 'electro'
-        assert all_tags[0].name == 'Electro'
-        assert all_tags[2].uri == 'house'
-        assert all_tags[2].name == 'House'
+        assert len(article.tags) == 3
+        assert article.tags[0].uri == 'electro'
+        assert article.tags[0].name == 'Electro'
+        assert article.tags[2].uri == 'house'
+        assert article.tags[2].name == 'House'
 
         # Let's be sure that attributes of the existing tag have not changed.
-        assert all_tags[1] is existing
-        assert all_tags[1].uri == 'funk'
-        assert all_tags[1].name == 'Funky'
+        assert article.tags[1] is existing
+        assert article.tags[1].uri == 'funk'
+        assert article.tags[1].name == 'Funky'
+
+    async def test_insert_tags_later(self, answers, db, prompt, source_file):
+        source_file.move('blog/2019/03-07.insert_tags.html')
+        article = ArticleFactory(uri='insert_tags', tags=[])
+
+        await self.handler(source_file, prompt=prompt).insert_tags(later=True)
+
+        assert len(article.tags) == 0
+        prompt.answer_quiz()
+        assert len(article.tags) == 3
+
+        assert article.tags[0].uri == 'electro'
+        assert article.tags[0].name == 'Electro'
+        assert article.tags[1].uri == 'funk'
+        assert article.tags[1].name == 'Funk'
+        assert article.tags[2].uri == 'house'
+        assert article.tags[2].name == 'House'
 
     # Scan date.
 
@@ -239,8 +407,8 @@ class TestArticleSourceParser(BaseDocumentSourceParserTest):
 
     @pytest.fixture(scope='class')
     def source(self, fixtures):
-        document = fixtures['blog/article.html'].open().read()
-        return self.parser(document)
+        source_file = fixtures['blog/article.html'].open().read()
+        return self.parser(source_file)
 
     # Parse category.
 

@@ -1,25 +1,19 @@
-"""Collection of helpers to execute command-line tools."""
+"""Collection of helpers relying on locally installed programs to run."""
 
+import asyncio
 from functools import partial
-from subprocess import run
 from typing import Callable
-
-from website.exceptions import CommandLineError
 
 
 class BaseCommandLine:
     """Base class to run command lines for a specific program.
 
-    Commands are executed with :func:`subprocess.run` by default.
+    Commands are executed with :func:`asyncio.create_subprocess_shell`
+    by default.
 
     :param shell:
-        alternative to :func:`subprocess.run`, with a similar API. Commands to
-        execute are given to this function as strings and not lists. Also, when
-        commands exit with a nonzero status code, the function should not fail
-        silently, but raises an exception instead.
-
-    :raise OSError:
-        if :attr:`program` is not installed on the machine.
+        alternative to :func:`asyncio.create_subprocess_shell`, with a similar
+        API.
     """
 
     #: Name of the program's binary to execute.
@@ -27,36 +21,39 @@ class BaseCommandLine:
 
     def __init__(self, shell: Callable = None):
         self.shell = shell or partial(
-            run,
-            shell=True,  # Execute command lines as strings and not lists
-            check=True,  # Verify status code
-            capture_output=True,  # Store stdout and stderr
-            text=True,  # Decode stdout and stderr
+            asyncio.create_subprocess_shell,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
 
-        if not self.is_installed():
-            raise OSError(f"{self.program.title()} binary not found")
-
-    def is_installed(self) -> bool:
+    async def is_installed(self) -> bool:
         """Check if the program is installed on the machine."""
-        try:
-            self.shell(f'which {self.program}')
-        except Exception:
+        cmdline = await self.shell(f'which {self.program}')
+
+        # Use communicate() instead of wait(), to avoid potential deadlocks,
+        # as stdout/stderr are captured by default when defining self.shell
+        _stdout, _stderr = await cmdline.communicate()
+
+        if cmdline.returncode > 0:
             return False
 
         return True
 
-    def run(self, options: str) -> str:
+    async def run(self, options: str) -> str:
         """Run a command, using :attr:`shell`, and return its result.
 
         :param options:
             arguments to append to :attr:`program` on the command line.
-        :raise ~.CommandLineError:
-            when something wrong happens.
-        """
-        cmdline = f'{self.program} {options}'
 
-        try:
-            return self.shell(cmdline).stdout
-        except Exception as exc:
-            raise CommandLineError(exc)
+        :raise OSError:
+            when something wrong happens during command execution.
+        :raise UnicodeDecodeError:
+            if it's not possible to decode the command's result.
+        """
+        cmdline = await self.shell(f'{self.program} {options}')
+        stdout, stderr = await cmdline.communicate()
+
+        if cmdline.returncode > 0:
+            raise OSError(stderr.decode())  # Can raise UnicodeDecodeError
+
+        return stdout.decode()  # Can raise UnicodeDecodeError

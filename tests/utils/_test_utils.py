@@ -1,27 +1,50 @@
 from abc import ABC, abstractmethod
 from functools import partial
+from hashlib import sha1
+from typing import Union
+
+from website.utils import BaseCommandLine
 
 import pytest
 
 
 class BaseCommandLineTest(ABC):
     @abstractmethod
-    @pytest.fixture(scope='class')
-    def default(self) -> partial:
+    @pytest.fixture
+    def program_factory(self) -> Union[BaseCommandLine, partial]:
         """Initialize with default parameters the command-line utility to test.
 
-        Only meant to be used by methods defined in this base test class.
+        Meant to be used by test methods defined in this base class.
         """
 
-    # Initialize command-line utility.
+    # Is program installed?
 
-    def test_program_not_installed(self, default, shell):
-        def program_not_installed():
-            raise Exception("Binary not found")
+    async def test_program_is_installed(self, program_factory, shell):
+        program = program_factory(shell=shell)
+        shell.result = f"/usr/bin/{program.program}"
+        installed = await program.is_installed()
+        assert installed is True
 
-        shell.result = program_not_installed
+    async def test_program_is_not_installed(self, program_factory, shell):
+        program = program_factory(shell=shell)
+        shell.result = (f"no {program.program} in /usr/bin", 1)
+        installed = await program.is_installed()
+        assert installed is False
+
+    # Run program.
+
+    async def test_running_error(self, program_factory, shell):
+        program = program_factory(shell=shell)
+        shell.result = ("Große Katastrophe!!!", 1)
 
         with pytest.raises(OSError) as excinfo:
-            default(shell=shell)
+            await program.run('BOUM!')
 
-        assert "binary not found" in str(excinfo.value)
+        assert "Katastrophe" in str(excinfo)
+
+    async def test_result_decoding_error(self, program_factory, shell):
+        program = program_factory(shell=shell)
+        shell.result = sha1(b"Nich Gut!").digest()
+
+        with pytest.raises(UnicodeDecodeError):
+            await program.run('BADABOUM!')

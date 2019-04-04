@@ -1,8 +1,10 @@
 """Manage content updates of my blog."""
 
+import logging
 import re
 from datetime import date
-from typing import List
+from functools import partial
+from typing import Iterable
 
 import lxml.etree
 from lxml.cssselect import CSSSelector
@@ -10,6 +12,8 @@ from lxml.cssselect import CSSSelector
 from website import exceptions
 from website.blog.models import Article, Category, Tag
 from website.content import BaseDocumentHandler, BaseDocumentSourceParser
+
+logger = logging.getLogger(__name__)
 
 
 class ArticleSourceParser(BaseDocumentSourceParser):
@@ -86,75 +90,85 @@ class ArticleHandler(BaseDocumentHandler):
 
     # Main API
 
-    def delete(self) -> None:
-        """Delete article from database, and clean orphan tags.
+    async def process(self, *, batch: bool = False) -> None:
+        """Parse :attr:`path` and update :attr:`document`'s attributes.
 
-        :raise ~.ItemNotFound: if the article doesn't exist.
+        :param batch:
+            set to ``True`` to delay some actions requiring user input.
+            Useful when several documents are processed in parallel.
         """
-        super().delete()  # Can raise ItemNotFound
-        Tag.delete_orphans()
+        source = await self.source
+
+        self.document.title = source.parse_title()
+        self.document.lead = source.parse_lead()
+        self.document.body = source.parse_body()
+
+        await self.insert_category(later=batch)
+        await self.insert_tags(later=batch)
 
     # Helpers
 
-    def process(self, article: Article) -> None:
-        """Parse :attr:`path` and update an article already loaded from database.
+    async def insert_category(self, *, later: bool = False) -> None:
+        """Parse and save article's category.
 
-        If the article has new category/tags which don't exist yet in database,
-        then these latter are created interactively (i.e., by asking questions
-        to the user if necessary).
+        If not already existing, the category is then created in database.
 
-        :param article: the article to update.
-        """  # noqa: E501
-        source = self.load()
-
-        article.title = source.parse_title()
-        article.lead = source.parse_lead()
-        article.body = source.parse_body()
-        article.category = self.insert_category(source)
-        article.tags = self.insert_tags(source)
-
-    def insert_category(self, source: ArticleSourceParser = None) -> Category:
-        """Return article's category, and create it in database if necessary.
-
-        If already loaded previously, the article's source file can be given as
-        an argument, to not load it again, and avoid inconsistencies if the
-        file changed in the meantime.
+        :param later: set to ``True`` to postpone user input.
         """
-        source = source or self.load()
+        source = await self.source
         uri = source.parse_category()
 
+        insertion = partial(self._insert_category, uri)
+
+        if later:
+            self.prompt.solve_later(insertion)
+        else:
+            insertion()
+
+    def _insert_category(self, uri: str) -> None:
         try:
             category = Category.find(uri=uri)
         except exceptions.ItemNotFound:
-            name = self.prompt(
-                f'Please enter a name for the new "{uri}" category: ')
+            name = self.prompt.ask_for(Category.name, uri=uri)
+
             category = Category(uri=uri, name=name)
             category.save()
 
-        return category
+            logger.info("Created new category: %s", category.uri)
 
-    def insert_tags(self, source: ArticleSourceParser = None) -> List[Tag]:
-        """Return article's tags, and create new ones in database if necessary.
+        self.document.category = category
 
-        If already loaded previously, the article's source file can be given as
-        an argument, to not load it again, and avoid inconsistencies if the
-        file changed in the meantime.
+    async def insert_tags(self, *, later: bool = False) -> None:
+        """Parse and save article's tags.
+
+        If not already existing, missing tags are created in database.
+
+        :param later: set to ``True`` to postpone user input.
         """
-        source = source or self.load()
-        uris = source.parse_tags()
-        tags = Tag.filter(uri=uris)
+        source = await self.source
+        tag_uris = set(source.parse_tags())
 
-        existing = set([tag.uri for tag in tags])
-        new = set(uris) - existing
+        insertion = partial(self._insert_tags, tag_uris)
 
-        for uri in new:
-            name = self.prompt(
-                f'Please enter a name for the new "{uri}" tag: ')
+        if later:
+            self.prompt.solve_later(insertion)
+        else:
+            insertion()
+
+    def _insert_tags(self, uris: Iterable[str]) -> None:
+        existing_tags = Tag.filter(uri=uris)
+        self.document.tags = existing_tags
+
+        new_tags = uris - set(t.uri for t in existing_tags)
+
+        for uri in new_tags:
+            name = self.prompt.ask_for(Tag.name, uri=uri)
+
             tag = Tag(uri=uri, name=name)
             tag.save()
-            tags.append(tag)
+            self.document.tags.add(tag)
 
-        return sorted(tags, key=lambda t: t.uri)
+            logger.info("Created new tag: %s", tag.uri)
 
     # Path Scanners
 

@@ -1,3 +1,4 @@
+import re
 from typing import Callable, Iterable
 
 
@@ -35,3 +36,12 @@ class FixtureMarker:
         """Mark additional fixtures, when the marker is used as a decorator."""
         self.fixtures.add(fixture.__name__)
         return fixture
+
+
+def look_for_content(actual: str, expected: str):
+    """...
+
+    Check string content, not formatting.
+    """
+    regex = expected.replace(' ', '.+')
+    assert re.search(regex, actual, flags=re.DOTALL)

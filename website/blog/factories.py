@@ -22,7 +22,7 @@ class ArticleFactory(BaseDatabaseFactory):
     last_update = None
 
     category = SubFactory('website.blog.factories.CategoryFactory')
-    tags = List([
+    _tags = List([
         SubFactory('website.blog.factories.TagFactory') for _ in range(2)])
 
 

@@ -1,62 +1,43 @@
-from functools import partial
-
 import pytest
 
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
 
-from tests.utils._test_utils import BaseCommandLineTest  # noqa: I100
+from tests._test_content import BaseDocumentReaderTest  # noqa: I100
 
 
-class TestAsciidoctorToHTMLConverter(BaseCommandLineTest):
+class TestAsciidoctorToHTMLConverter(BaseDocumentReaderTest):
+    reader = AsciidoctorToHTMLConverter
 
-    @pytest.fixture(scope='class')
-    def default(self, asciidoctor):
-        return partial(AsciidoctorToHTMLConverter)
+    # Convert document.
 
-    # Open document.
-
-    def test_open_not_existing_document(self, asciidoctor):
-        with pytest.raises(OSError) as excinfo:
-            asciidoctor('missing.adoc')
-
-        assert "doesn't exist" in str(excinfo.value)
-
-    # Read document.
-
-    def test_read_document(self, asciidoctor, fixtures):
+    async def test_convert_document(self, asciidoctor, fixtures):
         document = fixtures['document.adoc']
-        actual = asciidoctor(document).read()
+        actual = await asciidoctor(document).read()
         expected = fixtures['document.html'].open().read()
         assert actual == expected
 
-    def test_read_document_inside_context_manager(self, asciidoctor, fixtures):
+    async def test_convert_document_inside_context_manager(
+            self, asciidoctor, fixtures):
         adoc = fixtures['document.adoc']
         html = fixtures['document.html']
 
-        with asciidoctor(adoc) as f1, html.open() as f2:
-            actual = f1.read()
-            expected = f2.read()
+        async with asciidoctor(adoc) as f:
+            actual = await f.read()
+
+        with html.open() as f:
+            expected = f.read()
 
         assert actual == expected
 
-    def test_asciidoctor_cannot_convert_document(self, shell, tmp_path):
-        # Fixtures
-        class FakeAsciidoctor(AsciidoctorToHTMLConverter):
-            def is_installed(self):
-                return True
-
+    async def test_error_happening_during_conversion(
+            self, asciidoctor, tmp_path):
         document = tmp_path / 'empty.adoc'
         document.touch()
 
-        # Test
-        def conversion_error():
-            raise Exception("Syntax error")
+        adoc = asciidoctor(document)
+        document.unlink()
 
-        shell.result = conversion_error
-        asciidoctor = FakeAsciidoctor(shell)
+        with pytest.raises(OSError) as excinfo:
+            await adoc.read()
 
-        # Assertion
-        with pytest.raises(ValueError) as excinfo:
-            asciidoctor(document).read()
-
-        assert "Syntax error" in str(excinfo.value)
+        assert "empty.adoc is missing" in str(excinfo.value)

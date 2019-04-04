@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pytest
 
 from website import cloud as _cloud
@@ -27,7 +29,45 @@ class TestCloudFilesManager:
         file_2 = tmp_path / 'john_doe.txt'
         file_2.write_text("I'm John Doe.")
 
-        return [file_1, file_2]
+        file_3 = tmp_path / 'house_music.txt'
+        file_3.write_text("I love to dance all night long...")
+
+        return [file_1, file_2, file_3]
+
+    # Update files.
+
+    def test_update_files(self, object_store, static_files, tmp_path):
+        # Fixtures
+        _to_add = static_files[0]  # noqa: F841
+        to_replace = static_files[1]
+        to_delete = static_files[2]
+
+        objs = object_store.add([
+            (to_replace, to_replace.name),
+            (to_delete, to_delete.name),
+        ])
+        timestamp = datetime.now().isoformat()
+
+        # Test
+        to_delete.unlink()
+        to_replace.write_text("I'm Jane Doe.")
+
+        objs = object_store.update(tmp_path)
+
+        assert len(objs) == 2
+
+        assert objs[0].name == 'hello_world.txt'
+        assert objs[0].data == b"Hello, World!"
+        assert objs[0].last_modified_at > timestamp
+
+        assert objs[1].name == 'john_doe.txt'
+        assert objs[1].data == b"I'm Jane Doe."
+        assert objs[1].last_modified_at > timestamp
+
+    def test_error_happening_during_update(
+            self, network, object_store, tmp_path):
+        with network.unplug(), pytest.raises(exceptions.CloudError):
+            object_store.update(tmp_path)
 
     # Upload file.
 
@@ -83,9 +123,16 @@ class TestCloudFilesManager:
     def test_add_files(self, object_store, static_files):
         objs = object_store.add(static_files)
 
-        assert len(objs) == 2
+        assert len(objs) == 3
+
         assert objs[0].name == str(static_files[0])
+        assert objs[0].data == b"Hello, World!"
+
         assert objs[1].name == str(static_files[1])
+        assert objs[1].data == b"I'm John Doe."
+
+        assert objs[2].name == str(static_files[2])
+        assert objs[2].data == b"I love to dance all night long..."
 
     def test_add_files_with_new_names(self, object_store, static_files):
         static_files = [
@@ -96,8 +143,12 @@ class TestCloudFilesManager:
         objs = object_store.add(static_files)
 
         assert len(objs) == 2
+
         assert objs[0].name == 'static/hello_world.txt'
+        assert objs[0].data == b"Hello, World!"
+
         assert objs[1].name == 'static/john_doe.txt'
+        assert objs[1].data == b"I'm John Doe."
 
     def test_add_file_with_missing_source(self, object_store, tmp_path):
         static_file = tmp_path / 'missing.txt'
@@ -108,16 +159,25 @@ class TestCloudFilesManager:
     # Replace files.
 
     def test_replace_files(self, object_store, static_files):
+        # Fixtures
         object_store.add(static_files)
+        timestamp = datetime.now().isoformat()
 
         static_files[0].write_text("Hello, Galaxy!")
         static_files[1].write_text("I'm Jane Doe.")
 
+        # Test
         objs = object_store.replace(static_files)
 
         assert len(objs) == 2
+
+        assert objs[0].name == str(static_files[0])
         assert objs[0].data == b"Hello, Galaxy!"
+        assert objs[0].last_modified_at > timestamp
+
+        assert objs[1].name == str(static_files[1])
         assert objs[1].data == b"I'm Jane Doe."
+        assert objs[1].last_modified_at > timestamp
 
     def test_replace_files_with_different_names(
             self, object_store, static_files):
@@ -127,6 +187,7 @@ class TestCloudFilesManager:
             (static_files[1], 'static/john_doe.txt'),
         ]
         object_store.add(static_files)
+        timestamp = datetime.now().isoformat()
 
         # Test
         static_files[0][0].write_text("Hello, Galaxy!")
@@ -135,8 +196,27 @@ class TestCloudFilesManager:
         objs = object_store.replace(static_files)
 
         assert len(objs) == 2
+
+        assert objs[0].name == 'static/hello_world.txt'
         assert objs[0].data == b"Hello, Galaxy!"
+        assert objs[0].last_modified_at > timestamp
+
+        assert objs[1].name == 'static/john_doe.txt'
         assert objs[1].data == b"I'm Jane Doe."
+        assert objs[1].last_modified_at > timestamp
+
+    def test_only_replace_files_with_changes(self, object_store, static_files):
+        assert len(static_files) > 1
+        object_store.add(static_files)
+        timestamp = datetime.now().isoformat()
+
+        static_files[0].write_text("Hello, Galaxy!")
+        objs = object_store.replace(static_files)
+
+        assert len(objs) == 1
+        assert objs[0].name == str(static_files[0])
+        assert objs[0].data == b"Hello, Galaxy!"
+        assert objs[0].last_modified_at > timestamp
 
     def test_replace_not_existing_files(self, object_store, static_files):
         with pytest.raises(exceptions.CloudFileNotFound):

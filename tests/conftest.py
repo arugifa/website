@@ -1,3 +1,4 @@
+import inspect
 import re
 import shlex
 from pathlib import Path
@@ -14,8 +15,8 @@ from website.config import TestingConfig
 from website.factories import BaseCloudFactory
 from website.stubs import CloudStubConnectionFactory, NetworkStub
 from website.test.integration import (
-    CommandLine, FileFixtureCollection, InvokeStub, Prompt, RunReal, RunStub,
-    Shell)
+    CommandLine, FileFixtureCollection, InvokeStub, TestingPrompt, RunReal,
+    RunStub, TestingShell)
 from website.test.pytest import FixtureMarker
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
 from website.utils.git import Repository
@@ -25,12 +26,6 @@ integration_test = FixtureMarker()
 
 
 # Pytest Configuration
-
-def pytest_addoption(parser):
-    parser.addoption('--cloud_username')
-    parser.addoption('--cloud_api_key')
-    parser.addoption('--cloud_region')
-
 
 def pytest_generate_tests(metafunc):
     if 'cloud' in metafunc.fixturenames:
@@ -46,6 +41,7 @@ def pytest_collection_modifyitems(items):
     global integration_test
 
     for item in items:
+        # Apply markers to identify acceptance, integration and unit tests.
         integration_fixtures = integration_test.fixtures & set(item.fixturenames)  # noqa: E501
 
         if 'tests/acceptance/' in item.module.__file__:
@@ -61,6 +57,10 @@ def pytest_collection_modifyitems(items):
         else:
             item.add_marker(pytest.mark.unit)
 
+        # Apply marker to identify async tests.
+        if inspect.iscoroutinefunction(item.function):
+            item.add_marker(pytest.mark.asyncio)
+
 
 # Fixtures
 
@@ -73,7 +73,9 @@ def app():
 @pytest.fixture(scope='session')
 @integration_test
 def asciidoctor():
-    return AsciidoctorToHTMLConverter()
+    asciidoctor = AsciidoctorToHTMLConverter()
+    assert asciidoctor.is_installed()
+    return asciidoctor
 
 
 @pytest.fixture
@@ -150,17 +152,19 @@ def fixtures(request, tmp_path_factory):
 @pytest.fixture(scope='session')
 @integration_test
 def git():
-    return Repository
+    git = Repository
+    # assert git.is_installed()
+    return git
 
 
 @pytest.fixture
 def prompt():
-    return Prompt()
+    return TestingPrompt()
 
 
 @pytest.fixture
 def shell():
-    return Shell()
+    return TestingShell()
 
 
 @pytest.fixture(scope='session')

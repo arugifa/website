@@ -1,7 +1,9 @@
 """Command-line utilities to manage my website updates and deployment."""
 
+import asyncio
 import logging
 import sys
+from contextlib import suppress
 from functools import partial
 from pathlib import Path
 from sys import exit
@@ -10,11 +12,14 @@ import openstack
 from flask_frozen import Freezer
 from invoke import task
 
-from website import create_app, db as _db, exceptions
+from website import create_app, db as _db
 from website.blog.content import ArticleHandler
-from website.cloud import CloudManager
+from website.cloud import CloudUpdateManager
 from website.config import DevelopmentConfig
-from website.content import ContentManager
+from website.content import ContentUpdateManager
+from website.exceptions import (
+    CloudConnectionFailure, CloudContainerNotFound, ContentUpdateException,
+    NoUpdate, UpdateAborted)
 from website.helpers import setup_demo
 from website.stubs import CloudStubConnectionFactory
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
@@ -32,7 +37,23 @@ SASS_FILE = SOURCE_CODE / 'stylesheets/main.scss'
 PRODUCTION = {'cloud': openstack.connect}
 TESTING = {'cloud': CloudStubConnectionFactory}
 
-logging.basicConfig(format='%(message)s', level=logging.INFO)
+
+class VerboseTask(Task):
+    def __call__(self, *args, **kwargs):
+        verbose = kwargs.pop('verbose')
+
+        if verbose:
+            logging.basicConfig(format='%(message)s', level=logging.INFO)
+
+        return super().__call__(*args, **kwargs)
+
+    def argspec(self, body):
+        arg_names, spec_dict = super().argspec(body)
+
+        arg_names.append('verbose')
+        spec_dict['verbose'] = False
+
+        return arg_names, spec_dict
 
 
 # Development Servers
@@ -74,6 +95,7 @@ def demo(ctx):
 @task
 def compile_css(ctx, css_file=CSS_FILE, style='compact'):
     """Compile SASS files to a CSS stylesheet."""
+    # TODO: Add current date as a suffix (03/2019)
     ctx.run(f'sassc -t {style} {SASS_FILE} {css_file}')
 
 
@@ -83,7 +105,7 @@ def create_db(ctx, path):
     path = Path(path)
 
     if path.exists():
-        exit("Database already exists!")
+        exit("💥 Database already exists!")
 
     path.touch()
     config = DevelopmentConfig(DATABASE_PATH=path)
@@ -93,31 +115,36 @@ def create_db(ctx, path):
         _db.create_all()
 
 
-@task
+@task(klass=VerboseTask)
 def update(ctx, db, repository, commit='HEAD~1', force=False):
     """Update website's content from a content repository."""
     config = DevelopmentConfig(DATABASE_PATH=db)
     app = create_app(config)
 
-    # Get list of modified documents in the repository.
-    invoke_shell = partial(ctx.run, hide='stdout')
-    repository = Repository(repository, shell=invoke_shell)
-    diff = repository.diff(commit, quiet=False)
-
-    if not force:
-        confirm()
-
-    # Update documents in database.
+    repository = Repository(repository)
     handlers = {'blog': ArticleHandler}
-    reader = AsciidoctorToHTMLConverter(invoke_shell)
-    content = ContentManager(repository.path, handlers, reader)
+    asciidoctor = AsciidoctorToHTMLConverter()
+    content = ContentUpdateManager(repository, handlers, reader=asciidoctor)
 
-    with app.app_context():
+    async def main(content):
+        # In tests: content.update(repository).run()
+        async with content.update(commit) as update:
+            update.confirm()
+            await update.proceed()
+
+    with app.app_context(), suppress(UpdateAborted):
         try:
-            content.update(diff)
-        except ContentUpdateException:
+            asyncio.run(main(content))
+
+        except ContentUpdateException as error:
             _db.session.rollback()
+
+            print(f"💣 {error}")
             print("No change has been made to the database")
+
+        except NoUpdate:
+            print("Nothing to update 💤")
+
         else:
             _db.session.commit()
 
@@ -137,28 +164,28 @@ def freeze(ctx, dst=FROZEN_WEBSITE, preview=False):
         print(f"Website frozen in {freezer.root}")
 
 
-@task
+@task(klass=VerboseTask)
 def deploy(ctx, website=FROZEN_WEBSITE, container='website', noop=False):
+
+    def main(cloud):
+        async with cloud.update(website) as update:
+            update.confirm()
+            await update.proceed()
+
     try:
         connection = TESTING['cloud']() if noop else PRODUCTION['cloud']()
-        cloud = CloudManager(connection, container)
-    except exceptions.CloudConnectionFailure as exc:
-        sys.exit(f"Cannot connect to the Cloud: {exc}")
-    except exceptions.CloudContainerNotFound:
+        cloud = CloudUpdateManager(connection, container)
+
+        with suppress(UpdateAborted):
+            asyncio.run(main(cloud))
+
+    except CloudConnectionFailure as exc:
+        sys.exit(f"⛈ Cannot connect to the Cloud: {exc}")
+
+    except CloudContainerNotFound:
         sys.exit(
-            f'You must manually create and configure '
+            f'⛔ You must manually create and configure '
             f'the "{container}" container before deploying the website')
 
-    try:
-        cloud.update(website)
-    except CloudConnectionError as exc:
-        exit("Seems like there are some perturbations in the Cloud today! :o")
-
-
-# Helpers
-# =======
-
-def confirm():
-    answer = input("Do you want to continue? [Y/n] ")
-    if answer.lower() == 'n':
-        exit()
+    except NoUpdate:
+        print("Nothing to update 💤")

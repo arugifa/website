@@ -1,16 +1,24 @@
+import asyncio
 import re
 import shlex
-from collections import defaultdict
-from collections.abc import (
-    Mapping as AbstractMapping, MutableMapping as AbstractMutableMapping)
+import shutil
+from collections.abc import Mapping as AbstractMapping
 from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
 from subprocess import PIPE, Popen, run
-from typing import Callable, Mapping, Union
+from typing import Callable, Mapping, Tuple, Union
 
 from faker import Faker
 from _pytest.fixtures import FixtureRequest
+
+from website.content import WebsiteContentPrompt
+from website.stubs import stub
+
+
+ShellStatusCode = int
+ShellOutput = Union[str, Callable]
+ShellResult = Union[ShellOutput, Tuple[ShellOutput, ShellStatusCode]]
 
 fake = Faker()
 
@@ -38,7 +46,9 @@ class CommandLine:
 @dataclass
 class FileFixtureCollection(AbstractMapping):
     directory: Path
+    # TODO: Remove request, we don't use it (03/2019)
     request: FixtureRequest
+    # TODO: Rename to hardlinks (03/2019)
     symlinks: Path
 
     def __getitem__(self, key: str) -> 'FileFixture':
@@ -73,20 +83,29 @@ class FileFixture(PathLike):
     def __str__(self):
         return str(self.path)
 
-    def copy(self, target):
-        new_path = self.collection.symlinks / target
+    def copy(self, target: Union[str, Path], shallow: bool = False) -> 'FileFixture':
+        target = Path(target)
 
-        if new_path.exists():
-            new_path.unlink()
-        elif not new_path.parent.exists():
-            new_path.parent.mkdir(parents=True)
+        if not target.is_absolute():
+            target = self.collection.symlinks / target
 
-        new_path.symlink_to(self.path)
-        return FileFixture(new_path, self.collection)
+        if target.exists():  # To be used with session-scoped fixtures
+            target.unlink()
+        elif not target.parent.exists():
+            target.parent.mkdir(parents=True)
 
-    def rename(self, target):
-        self.path = self.copy(target).path
-        return self
+        if shallow:
+            target.symlink_to(self.path)
+        else:
+            shutil.copyfile(self.path, target)
+
+        return FileFixture(target, self.collection)
+
+    def move(self, target: Union[str, Path]) -> None:
+        self.path = self.symlink(target).path
+
+    def symlink(self, target: Union[str, Path]) -> 'FileFixture':
+        return self.copy(target, shallow=True)
 
 
 class InvokeStub:
@@ -98,19 +117,26 @@ class InvokeStub:
         return run(cmdline, stdout=PIPE, universal_newlines=True)
 
 
-class Prompt:
+class TestingPromptInput:
     def __init__(self):
         self.answers = {}
 
-    def __call__(self, text: str) -> str:
+    @stub(input, classified=True)
+    def __call__(self, prompt=None):
         for question, answer in self.answers.items():
-            if question.search(text):
+            if question.search(prompt):
                 return answer
 
         return fake.word()
 
+
+class TestingPrompt(WebsiteContentPrompt):
+    def __init__(self):
+        input = TestingPromptInput()
+        WebsiteContentPrompt.__init__(self, input=input)
+
     def add_answers(self, answers: Mapping[str, str]) -> None:
-        self.answers.update({
+        self.input.answers.update({
             re.compile(question): answer
             for question, answer in answers.items()
         })
@@ -150,21 +176,75 @@ class Shell(AbstractMutableMapping):
 """
 
 
-class Shell:
+@stub(asyncio.create_subprocess_shell)
+class TestingShell:
     def __init__(self):
         self._result = None
 
-    def __call__(self, cmdline: str) -> str:
-        return self._result()
+    # Original methods and attributes.
+
+    async def __call__(self, cmdline: str) -> 'TestingShell':
+        return self
+
+    @property
+    def stdout(self):
+        stdout = self._result[0]
+        return stdout if not stdout else stdout()
+
+    @property
+    def stderr(self):
+        stderr = self._result[1]
+        return stderr if not stderr else stderr()
+
+    @property
+    def returncode(self):
+        return self._result[2]
+
+    # Stub methods and attributes.
 
     @property
     def result(self):
         return self._result
 
     @result.setter
-    def result(self, value):
-        value = (lambda: value) if isinstance(value, str) else value
-        self._result = value
+    def result(self, value: ShellResult):
+        """...
+
+        :param value:
+            the result of the executed command (output + status code).
+            Instead of a string, a function can be used to dynamically generate
+            the output, which can be useful to trigger side-effects
+            (e.g., raising an exception). Also, if the status code is not null,
+            then the output is assigned to :attr:`~stderr`, and not
+            :attr:`~stdout`.
+        """
+        if isinstance(value, tuple):
+            output, status = value
+        else:
+            output = value
+            status = 0
+
+        if callable(output):
+            result = output
+        elif isinstance(output, str):
+            result = (lambda: output.encode())
+        else:  # Bytes
+            result = (lambda: output)
+
+        if status == 0:
+            stdout = result
+            stderr = b''
+        else:
+            stdout = b''
+            stderr = result
+
+        self._result = (stdout, stderr, status)
+
+    async def communicate(self) -> Tuple[str, None]:
+        return self.stdout, self.stderr
+
+    async def wait(self) -> int:
+        return self.returncode
 
 
 class RunStub:

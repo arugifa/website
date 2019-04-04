@@ -8,8 +8,30 @@ from tests._test_models import BaseTestDocumentModel, BaseTestModel  # noqa: E50
 class TestArticleModel(BaseTestDocumentModel):
     factory = factories.ArticleFactory
     model = models.Article
-    optional_fields = ['last_update', 'publication_date']
-    filterable_column = 'title'
+    doc_type = 'article'
+    table = 'articles'
+
+    def test_tag_list_is_always_sorted(self):
+        tag_1 = factories.TagFactory(uri='tag_1')
+        tag_2 = factories.TagFactory(uri='tag_2')
+        tag_3 = factories.TagFactory(uri='tag_3')
+
+        # When creating a new article.
+        article = factories.ArticleFactory(tags=[tag_2, tag_1, tag_3])
+        assert article.tags == [tag_1, tag_2, tag_3]
+
+        # When assigning new tags.
+        article.tags = [tag_3, tag_2, tag_1]
+        assert article.tags == [tag_1, tag_2, tag_3]
+
+        # When adding new tags.
+        tag_0 = factories.TagFactory(uri='tag_0')
+        tag_4 = factories.TagFactory(uri='tag_4')
+
+        article.tags.add(tag_0)
+        article.tags.add(tag_4)
+
+        assert article.tags == [tag_0, tag_1, tag_2, tag_3, tag_4]
 
     def test_retrieve_latest_articles(self):
         today = date.today()
@@ -29,10 +51,12 @@ class TestArticleModel(BaseTestDocumentModel):
 class TestCategoryModel(BaseTestModel):
     factory = factories.CategoryFactory
     model = models.Category
-    filterable_column = 'name'
+    doc_type = 'category'
+    table = 'categories'
 
 
 class TestTagModel(BaseTestModel):
     factory = factories.TagFactory
     model = models.Tag
-    filterable_column = 'name'
+    doc_type = 'tag'
+    table = 'tags'

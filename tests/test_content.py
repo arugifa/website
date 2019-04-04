@@ -1,61 +1,121 @@
 from datetime import date
 from pathlib import PurePath
+from random import random
 
 import pytest
 
 from website import exceptions
 from website.blog.content import ArticleHandler
 from website.blog.factories import ArticleFactory
-from website.content import ContentManager
+from website.content import ContentUpdateManager
 
 
-class TestContentManager:
+class TestContentUpdateManager:
+
+    '''
+    def test_print_diff(self, repository):
+        stream = StringIO()
+        repository.diff('HEAD~2', quiet=False, output=stream)
+
+        assert stream.getvalue() == dedent("""\
+            The following files have been added:
+            - added.txt
+            - new.txt
+            The following files have been modified:
+            - modified.txt
+            The following files have been renamed:
+            - to_rename.txt -> renamed.txt
+            The following files have been deleted:
+            - deleted.txt
+        """)
+    '''
 
     @pytest.fixture(scope='class')
     def handlers(self):
         return {'blog': ArticleHandler}
 
     @pytest.fixture(scope='class')
-    def changes(self, fixtures):
+    def changes(self, repository):
+        return repository.diff('HEAD~4')
+
+    @pytest.fixture(scope='class')
+    def repository(self, fixtures, git, tmp_path_factory):
         article = fixtures['blog/article.html']
+        tmpdir = tmp_path_factory.mktemp(self.__class__.__name__)
 
-        return {
-            'added': [article.copy('blog/to_add.html')],
-            'modified': [article.copy('blog/to_modify.html')],
-            'renamed': [(
-                article.copy('blog/to_rename.html'),
-                article.copy('blog/renamed.html'),
-            )],
-            'deleted': [article.copy('blog/to_delete')],
-        }
+        # Initialize repository.
+        repo = git.init(tmpdir)
 
+        to_rename = self.copy(article, repo.path / 'blog/to_rename.html')
+        to_modify = self.copy(article, repo.path / 'blog/modified.html')
+        to_delete = self.copy(article, repo.path / 'blog/deleted.html')
+        import pdb
+        pdb.set_trace()
+
+        repo.add(to_rename, to_modify, to_delete)
+        repo.commit('HEAD~4')
+
+        # Add documents.
+        added = self.copy(article, repo.path / 'blog/added.html')
+        repo.add(added)
+        repo.commit('HEAD~3')
+
+        # Rename documents.
+        repo.move(to_rename, repo.path / 'blog/renamed.html')
+        repo.commit('HEAD~2')
+
+        # Modify documents.
+        with to_modify.open('a') as f:
+            f.write('modification')
+
+        repo.add(to_modify)
+        repo.commit('HEAD~1')
+
+        # Delete documents.
+        repo.remove(to_delete)
+        repo.commit('HEAD')
+
+        import pdb
+        pdb.set_trace()
+        return repo
+
+    # XXX: Set prompt's scope to class? (03/2019)
     @pytest.fixture
-    def content(self, fixtures, handlers, prompt):
-        return ContentManager(fixtures.symlinks, handlers, prompt=prompt)
+    def content(self, repository, handlers, prompt):
+        return ContentUpdateManager(repository, handlers, prompt=prompt)
+
+    def copy(self, src, dst):
+        document = src.copy(dst)
+
+        with document.open('a') as f:
+            stamp = random()
+            f.write(f"{stamp}")
+
+        return document
 
     # Update content.
 
     # TODO: Update at least 2 different kinds of documents (02/2019)
     # Because that's how the content manager is intended to behave...
-    def test_update_content(self, changes, content, db, fixtures):
+    async def test_update_content(self, repository, content, db, fixtures):
         # Fixtures
-        to_delete = ArticleFactory(uri='to_delete')
+        to_delete = ArticleFactory(uri='deleted')
 
-        to_modify = ArticleFactory(uri='to_modify')
+        to_modify = ArticleFactory(uri='modified')
         assert to_modify.last_update is None
 
         to_rename = ArticleFactory(uri='to_rename')
         assert to_rename.last_update is None
 
         # Test
-        documents = content.update(changes)
+        documents = await content.update(repository).run()
 
         # Assertions
         assert len(documents) == 3
 
-        assert documents[0].uri == 'to_add'
+        assert documents[0].uri == 'added'
 
-        assert documents[1].uri == 'to_modify'
+        assert documents[1].uri == 'modified'
         assert documents[1].last_update == date.today()
 
         assert documents[2].uri == 'renamed'

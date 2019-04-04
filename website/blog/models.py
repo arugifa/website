@@ -1,11 +1,34 @@
 """Blog models."""
 
-from typing import Iterator
+from operator import attrgetter
+from typing import Iterable, Iterator
 
+from sortedcontainers import SortedKeyList
 from sqlalchemy import func
+from sqlalchemy.ext.hybrid import hybrid_property
 
 from website import db
 from website.models import BaseModel, Document
+
+
+# Custom Types
+
+class TagList(SortedKeyList):
+    """Keep tags always sorted.
+
+    This makes testing easier, especially when documents are updated and that
+    tags are inserted asynchronously.
+    """
+
+    def __init__(self, tags: Iterable['Tag'] = None):
+        SortedKeyList.__init__(self, tags, key=attrgetter('uri'))
+
+    def append(self, tag: 'Tag'):
+        """Method required by SQLAlchemy.
+
+        In order to populate the list when loading tags from database.
+        """
+        return self.add(tag)
 
 
 # Models
@@ -13,24 +36,25 @@ from website.models import BaseModel, Document
 class Article(Document):
     """Blog article."""
 
-    # TODO: Use declared attribute for table names, in the base class (01/2019)
-    # For example:
-    #     @declared_attr
-    #     def __tablename__(cls):
-    #         return cls.__name__.lower()
-    __tablename__ = 'articles'
-
-    id = db.Column(db.Integer, primary_key=True)
-    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'))
+    category_id = db.Column(
+        db.Integer, db.ForeignKey('categories.id'), nullable=False)
 
     title = db.Column(db.String, nullable=False)
     lead = db.Column(db.String, nullable=False)
     body = db.Column(db.Text, nullable=False)
 
     category = db.relationship('Category', back_populates='articles')
-    tags = db.relationship(
-        'Tag', order_by='Tag.uri',
+    _tags = db.relationship(
+        'Tag', order_by='Tag.uri', collection_class=TagList,
         secondary='article_tags', back_populates='articles')
+
+    @hybrid_property
+    def tags(self) -> TagList:
+        return self._tags
+
+    @tags.setter
+    def tags(self, value: Iterable):
+        self._tags = TagList(value)
 
     @classmethod
     def latest_ones(cls) -> Iterator['Article']:
@@ -43,21 +67,10 @@ class Article(Document):
         """
         return cls.query.order_by(cls.publication_date.desc(), cls.id.desc())
 
-    def exists(self) -> bool:
-        """Check if an article with the same :attr:`uri` already exists."""
-        # Thx to https://stackoverflow.com/a/41951905/2987526
-        article = Article.query.filter_by(uri=self.uri)
-        return db.session.query(article.exists()).scalar()
-
 
 class Category(BaseModel):
     """Article category (e.g., programming, mountaineering, politics, etc)."""
 
-    __tablename__ = 'categories'
-
-    id = db.Column(db.Integer, primary_key=True)
-
-    uri = db.Column(db.String, unique=True, nullable=False)
     name = db.Column(db.String, nullable=False)
     articles = db.relationship('Article', back_populates='category')
 
@@ -65,14 +78,10 @@ class Category(BaseModel):
 class Tag(BaseModel):
     """Article tag (e.g., Python, cloud, Rust, etc.)."""
 
-    __tablename__ = 'tags'
-
-    id = db.Column(db.Integer, primary_key=True)
-
-    uri = db.Column(db.String, unique=True, nullable=False)
     name = db.Column(db.String, nullable=False)
-    articles = db.relationship('Article', secondary='article_tags', back_populates='tags')  # noqa: E501
+    articles = db.relationship('Article', secondary='article_tags', back_populates='_tags')  # noqa: E501
 
+    # TODO: write test in content update manager (03/2019)
     @classmethod
     def delete_orphans(cls) -> int:
         """Delete tags not associated with any other documents.
@@ -80,7 +89,7 @@ class Tag(BaseModel):
         :return: number of tags deleted.
         """
         # Thanks to https://stackoverflow.com/a/18193592/2987526
-        return db.session.query(Tag).having(func.count(Article.id) == 0).delete()
+        return db.session.query(Tag).having(func.count(Article.id) == 0).delete()  # noqa: E501
 
 
 # Many-to-Many Relationships

@@ -2,10 +2,12 @@
 
 https://docs.openstack.org/openstacksdk/latest/user/proxies/object_store.html
 """
+import inspect
 from contextlib import contextmanager
 from copy import copy
+from datetime import datetime
 from hashlib import md5
-from inspect import getmembers, isclass, isfunction, signature
+from inspect import getmembers, isbuiltin, isclass, isfunction, signature
 
 import openstack
 from openstack.connection import Connection
@@ -14,6 +16,9 @@ from openstack.exceptions import (
 from openstack.object_store.v1._proxy import Proxy as ObjectStore
 from openstack.object_store.v1.container import Container
 from openstack.object_store.v1.obj import Object
+
+POSITIONAL_OR_KEYWORD = inspect._ParameterKind.POSITIONAL_OR_KEYWORD
+POSITIONAL_ONLY = inspect._ParameterKind.POSITIONAL_ONLY
 
 
 def fqin(obj):
@@ -52,12 +57,25 @@ def stub(original, classified=False):
                 stub_signature = signature(obj)
 
                 if classified:
-                    original_parameters = filter(
+                    parameters = filter(
                         lambda p: p.name != 'self',
-                        signature(obj).parameters.values(),
+                        stub_signature.parameters.values(),
                     )
                     stub_signature = stub_signature.replace(
-                        parameters=original_parameters)
+                        parameters=parameters)
+
+                if isbuiltin(original):
+                    def update_param(p):
+                        if p.kind == POSITIONAL_ONLY:
+                            return p.replace(kind=POSITIONAL_OR_KEYWORD)
+                        return p
+
+                    parameters = map(
+                        update_param,
+                        original_signature.parameters.values(),
+                    )
+                    original_signature = original_signature.replace(
+                        parameters=parameters)
 
                 assert stub_signature == original_signature
 
@@ -284,6 +302,7 @@ class CloudStubObject:
         self.container = attrs['container']
         self.name = attrs['name']
         self.data = self._data = data
+        self.last_modified_at = datetime.now().isoformat()
 
     @property
     def etag(self):

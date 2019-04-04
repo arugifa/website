@@ -1,15 +1,17 @@
 """Helpers to identify changes, with Git, in the website's content."""
 
 import hashlib
-import sys
 from pathlib import Path
-from typing import Callable, Dict, Iterable, Mapping, TextIO, Union
+from typing import Callable, Dict, Iterable, Union
 
 from git import Repo
+from git.exc import InvalidGitRepositoryError, NoSuchPathError
 
+from website import exceptions
 from website.utils import BaseCommandLine
 
 
+# TODO: Rename to GitRepository (03/2019)
 class Repository(BaseCommandLine):
     """Wrapper around :class:`git.Repo` to provide a nicer API.
 
@@ -17,8 +19,8 @@ class Repository(BaseCommandLine):
     been rewritten:
 
     - to simulate how Git is used on the command-line,
-    - and decouple tests from code implementation (so the tests don't depend
-      directly on :mod:`git`).
+    - and decouple tests from code implementation
+      (so the tests don't depend directly on :mod:`git`).
 
     :param path:
         repository's path.
@@ -26,17 +28,21 @@ class Repository(BaseCommandLine):
         alternative shell to interact with ``git``. Must have a similar API to
         :func:`subprocess.run`, and raise an exception when executed commands
         exit with a nonzero status code.
-
-    :raise OSError:
-        if Git is not installed on the machine.
+    :raise ~.RepositoryNotFound:
+        if no repository exists at ``path``.
     """
 
     program = 'git'
 
     def __init__(self, path: Union[str, Path], shell: Callable = None):
-        BaseCommandLine.__init__(self, shell=shell)  # Can raise OSError
+        BaseCommandLine.__init__(self, shell=shell)
+
+        try:
+            self._repo = Repo(path)
+        except (NoSuchPathError, InvalidGitRepositoryError):
+            raise exceptions.RepositoryNotFound(path)
+
         self.path = Path(path)
-        self._repo = Repo(path)
 
     @classmethod
     def init(cls, directory: Union[str, Path]) -> 'Repository':
@@ -44,7 +50,7 @@ class Repository(BaseCommandLine):
         Repo.init(directory, mkdir=True)
         return cls(directory)
 
-    def add(self, files: Iterable[Union[str, Path]] = None) -> None:
+    def add(self, *files: Union[str, Path]) -> None:
         """Add files to the repository's index.
 
         By default, adds all untracked files and unstaged changes to the index.
@@ -64,6 +70,14 @@ class Repository(BaseCommandLine):
                     # Deleted or renamed files.
                     self._repo.index.remove([change.a_blob.path])
 
+    # TODO: Add test (03/2019)
+    def remove(self, *files: Union[str, Path]) -> None:
+        self._repo.index.remove(map(str, files))
+
+    # TODO: Add test (03/2019)
+    def move(self, src: Union[str, Path], dst: Union[str, Path]) -> None:
+        self._repo.index.move([str(src), str(dst)])
+
     def commit(self, message: str) -> str:
         """Commit files added to the repository's index.
 
@@ -74,14 +88,12 @@ class Repository(BaseCommandLine):
         return hashlib.sha1(commit.binsha).hexdigest()
 
     def diff(
-            self, from_commit: str, to_commit: str = 'HEAD',
-            quiet=True, output: TextIO = sys.stdout) -> Dict[str, Path]:
+            self, from_commit: str,
+            to_commit: str = 'HEAD') -> Dict[str, Iterable[Path]]:
         """Return changes between two commits.
 
         :param from_commit: hash of the reference commit.
         :param to_commit: hash of the commit to compare to.
-        :param quiet: prints changes on ``output`` if set to ``False``.
-        :param output: text stream to use for printing.
 
         :return: ``added``, ``modified``, ``renamed`` and ``deleted`` files.
         """
@@ -106,26 +118,4 @@ class Repository(BaseCommandLine):
             ),
         }
 
-        if not quiet:
-            self.print_diff(pretty_diff, output)
-
         return pretty_diff
-
-    @staticmethod
-    def print_diff(diff: Mapping, output: TextIO = sys.stdout) -> None:
-        """Print a Git diff.
-
-        :param diff: pretty version of a diff, as returned by :meth:`diff`.
-        :param output: text stream to print the diff.
-        """
-        for action, files in diff.items():
-            if files:
-                print(f"The following files have been {action}:", file=output)
-
-                for f in files:
-                    if isinstance(f, tuple):
-                        # - src_file -> dst_file
-                        print("- ", end="", file=output)
-                        print(*f, sep=" -> ", file=output)
-                    else:
-                        print(f"- {f}", file=output)

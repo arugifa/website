@@ -1,22 +1,96 @@
 """Main entry point to manage content of my website."""
 
+import asyncio
+import logging
 from abc import ABC, abstractmethod
-from contextlib import AbstractContextManager
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-from datetime import date
+from io import StringIO
 from pathlib import Path, PurePath
-from typing import Callable, ClassVar, Iterable, List, Mapping, Tuple, Union
+from typing import (
+    Callable, ClassVar, Dict, Iterable, List, Mapping, Tuple, Union)
 
+import aiofiles
 import lxml.etree
 import lxml.html
 from lxml.cssselect import CSSSelector
 
 from website import exceptions
+from website.blog.models import Category, Tag
 from website.models import Document
+from website.update import (
+    AsyncShellPrompt, BaseUpdateRunner, BaseUpdateManager)
+from website.utils import BaseCommandLine
+from website.utils.git import Repository
+
+DocumentPath = Union[Path, PurePath]  # For prod and tests
+
+logger = logging.getLogger(__name__)
 
 
-@dataclass
-class ContentManager:
+class ContentUpdateRunner(BaseUpdateRunner):
+
+    def __init__(self, from_commit: str, to_commit: str, **kwargs):
+        BaseUpdateRunner.__init__(self, **kwargs)
+        self.from_commit = from_commit
+        self.to_commit = to_commit
+
+    def plan(self) -> Dict[str, List[Path]]:
+        diff = self.manager.repository.diff(self.from_commit, self.to_commit)
+        return {
+            'to_add': diff['added'],
+            'to_replace': diff['replaced'],
+            'to_rename': diff['renamed'],
+            'to_delete': diff['deleted'],
+        }
+
+    async def proceed(self) -> List[Document]:
+        """
+        :raise ~.ItemAlreadyExisting:
+            when trying to create documents already existing in database.
+        :raise ~.ItemNotFound:
+            when trying to modify documents not existing in database.
+        :raise ~.InvalidDocumentLocation:
+            when a source file is stored in a wrong directory.
+        """
+        added = await self.manager.add(self.todo['to_add'])
+        replaced = await self.manager.replace(self.todo['to_replace'])
+        renamed = await self.manager.rename(self.todo['to_rename'])
+
+        self.delete(self.todo['to_delete'])
+
+        return [added + replaced + renamed]
+
+    def generate_preview(self) -> str:
+        """Print a Git diff.
+
+        quiet: bool = True, output: TextIO = sys.stdout
+
+        :param diff: pretty version of a diff, as returned by :meth:`diff`.
+        :param output: text stream to print the diff.
+
+        :param quiet: prints changes on ``output`` if set to ``False``.
+        :param output: text stream to use for printing.
+        """
+        output = StringIO()
+
+        for action, files in self.todo:
+            if files:
+                print(f"The following files have been {action}:", file=output)
+
+                for f in files:
+                    if isinstance(f, tuple):
+                        # - src_file -> dst_file
+                        print("- ", end="", file=output)
+                        print(*f, sep=" -> ", file=output)
+                    else:
+                        print(f"- {f}", file=output)
+
+        return output
+
+
+# TODO: Add handlers to docstring (03/2019)
+class ContentUpdateManager(BaseUpdateManager):
     """Manage website's content life cycle.
 
     The content is organized as a set of categorized documents. For example::
@@ -29,8 +103,8 @@ class ContentManager:
     As part of website's content update, every document is loaded, processed,
     and finally stored, updated or deleted in the database.
 
-    :param directory:
-        path of the directory where website's content is stored.
+    :param repository:
+        path of the Git repository where website's content is stored.
     :param reader:
         function to read (and convert on the fly) documents.
     :param prompt:
@@ -38,40 +112,34 @@ class ContentManager:
         when certain things cannot be completely done automatically.
     """
 
-    directory: Path
-    handlers: Mapping[str, 'BaseDocumentHandler']
-    reader: Callable = open
-    prompt: Callable = input
+    runner = ContentUpdateRunner
+
+    def __init__(
+            self,
+            repository: Repository,
+            handlers: Mapping[str, 'BaseDocumentHandler'], *,
+            reader: Callable = aiofiles.open,
+            prompt: 'WebsiteContentPrompt' = None):
+
+        self.repository = repository
+        self.handlers = handlers
+        self.reader = reader
+        self.prompt = prompt or WebsiteContentPrompt()
 
     # Main API
 
-    def update(self, changes: Mapping[str, Iterable[Path]]) -> List[Document]:
-        """Update documents in database.
+    # TODO: Update docstring (03/2019)
+    def update(self, from_commit: str, to_commit: str = 'HEAD'):
+        """...
 
-        :param changes:
-            source file paths of ``added``, ``modified``, ``renamed`` and
-            ``deleted`` document.
-
-        :raise ~.ItemAlreadyExisting:
-            when trying to create documents already existing in database.
-        :raise ~.ItemNotFound:
-            when trying to modify documents not existing in database.
-        :raise ~.InvalidDocumentLocation:
-            when a source file is stored in a wrong directory.
-
-        :return:
-            newly created or updated documents.
+        :param repository:
+            Git repository where website's content is stored.
         """
-        added = self.add(changes['added'])
-        modified = self.refresh(changes['modified'])
-        renamed = self.rename(changes['renamed'])
+        return ContentUpdateRunner(from_commit, to_commit, manager=self)
 
-        self.delete(changes['deleted'])
-
-        return added + modified + renamed
-
-    def add(self, new: Iterable[Path]) -> List[Document]:
-        """Insert new documents into database.
+    # TODO: Update docstring (03/2019)
+    async def add(self, new: Iterable[Path], *, batch=False) -> List[Document]:
+        """Manually insert specific new documents into database.
 
         :param new:
             paths of documents source files.
@@ -86,18 +154,12 @@ class ContentManager:
         :return:
             newly created documents.
         """
-        documents = []
+        return asyncio.gather(
+            self.get_handler(src).insert(batch=batch) for src in new)
 
-        for src in new:
-            # Can raise:
-            # HandlerNotFound, ItemAlreadyExisting, InvalidDocumentLocation.
-            document = self.get_handler(src).insert()
-            documents.append(document)
-
-        return documents
-
-    def refresh(self, existing: Iterable[Path]) -> List[Document]:
-        """Update existing documents in database.
+    # TODO: Update docstring (03/2019)
+    async def replace(self, existing: Iterable[Path], *, batch=False) -> List[Document]:
+        """Manually update specific existing documents in database.
 
         :param existing:
             paths of documents source files.
@@ -112,17 +174,12 @@ class ContentManager:
         :return:
             updated documents.
         """
-        documents = []
+        return await asyncio.gather(
+            self.get_handler(src).update(batch=batch) for src in new)
 
-        for src in existing:
-            # Can raise HandlerNotFound, ItemNotFound, InvalidDocumentLocation.
-            document = self.get_handler(src).update()
-            documents.append(document)
-
-        return documents
-
-    def rename(self, existing: Iterable[Tuple[Path, Path]]) -> List[Document]:
-        """Rename and update existing documents in database.
+    # TODO: Update docstring (03/2019)
+    async def rename(self, existing: Iterable[Tuple[Path, Path]], *, batch=False) -> List[Document]:
+        """Manually rename and update specific existing documents in database.
 
         :param existing:
             previous and new paths of documents source files.
@@ -137,7 +194,7 @@ class ContentManager:
         :return:
             updated documents.
         """
-        documents = []
+        tasks = []
 
         for src, dst in existing:
             # Can raise HandlerNotFound or ItemNotFound.
@@ -149,16 +206,17 @@ class ContentManager:
             except AssertionError:
                 raise exceptions.DocumentCategoryChanged(src, dst)
 
-            document = src_handler.rename(dst)  # Can raise ItemNotFound
-            documents.append(document)
+            # Can raise ItemNotFound.
+            task = src_handler.rename(dst, batch=batch)
+            tasks.append(task)
 
-        return documents
+        return await asyncio.gather(*tasks)
 
-    def delete(self, removed: Iterable[Path]) -> None:
-        """Delete documents from database.
+    def delete(self, removed: Iterable[PurePath]) -> None:
+        """Manually delete specific documents from database.
 
         :param removed:
-            paths of documents source files.
+            paths of deleted documents source files.
 
         :raise ~.ItemNotFound:
             if a document doesn't exist in database.
@@ -188,7 +246,7 @@ class ContentManager:
         """
         if document.is_absolute():
             try:
-                relative_path = document.relative_to(self.directory)
+                relative_path = document.relative_to(self.repository.path)
             except ValueError:
                 raise exceptions.InvalidDocumentLocation(document)
         else:
@@ -205,9 +263,19 @@ class ContentManager:
         return handler(document, self.reader, self.prompt)
 
 
+class WebsiteContentPrompt(AsyncShellPrompt):
+    @property
+    def questions(self):
+        return {
+            Category.name: (
+                'Please enter a name for the new "{uri}" category: '),
+            Tag.name: (
+                'Please enter a name for the new "{uri}" tag: '),
+        }
+
+
 # Document Processing
 
-@dataclass
 class BaseDocumentHandler(ABC):
     """Manage the life cycle of a document in database.
 
@@ -222,28 +290,69 @@ class BaseDocumentHandler(ABC):
         when certain things cannot be inferred automatically.
     """
 
-    path: Union[Path, PurePath]
-    reader: Callable = open
-    prompt: Callable = input
-
     #: Document model clas.
     model: ClassVar[Document]
     #: Document parser class.
     parser: ClassVar['BaseDocumentSourceParser']
 
+    def __init__(
+            self, path: DocumentPath, *,
+            reader: Callable = aiofiles.open, prompt: AsyncShellPrompt = None):
+        self.path = path
+        self.reader = reader
+        self.prompt = prompt or WebsiteContentPrompt()
+
+        self._document = None  # Used for caching purpose
+        self._source = None  # Used for caching purpose
+
+    @property
+    def document(self) -> Document:
+        """Look for the document in database.
+
+        :raise ~.ItemNotFound: if the document cannot be found.
+        """
+        if not self._document:
+            uri = self.scan_uri()
+            self._document = self.model.find(uri=uri)  # Can raise ItemNotFound
+
+        return self._document
+
+    @document.setter
+    def document(self, value: Document):
+        self._document = value
+
+    @property
+    async def source(self) -> 'BaseDocumentSourceParser':
+        """Load document's source on the fly.
+
+        :raise ~.DocumentLoadingError:
+            when something wrong happens while reading the source file.
+        """
+        if not self._source:
+            self._source = await self.load()  # Can raise DocumentLoadingError
+
+        return self._source
+
     # Main API
 
-    def insert(self) -> Document:
+    async def insert(self, *, batch: bool = False) -> Document:
         """Insert document into database.
 
+        :param batch:
+            set to ``True`` to delay some actions requiring user input.
+            Useful when several documents are processed in parallel.
         :return:
             the newly created document.
         :raise ~.ItemAlreadyExisting:
             if a conflict happens during document insertion.
         """
-        return self.update(create=True)  # Can raise ItemAlreadyExisting
+        # Can raise ItemAlreadyExisting.
+        return await self.update(create=True, batch=batch)
 
-    def update(self, uri: str = None, create: bool = False) -> Document:
+    # TODO: Update docstring (03/2019)
+    async def update(
+            self, uri: str = None, create: bool = False, *,
+            batch: bool = False) -> Document:
         """Update document in database.
 
         :param uri:
@@ -266,22 +375,32 @@ class BaseDocumentHandler(ABC):
             if document.exists():
                 raise exceptions.ItemAlreadyExisting(uri)
 
-        elif uri:  # Rename and update
-            document = self.model.find(uri=uri)  # Can raise ItemNotFound
-            document.uri = self.scan_uri()  # New URI
-            document.last_update = date.today()
+            self.document = document
 
-        else:  # Update only
-            uri = self.scan_uri()
-            document = self.model.find(uri=uri)  # Can raise ItemNotFound
-            document.last_update = date.today()
+        elif uri:  # Renaming
+            self.document = self.model.find(uri=uri)  # Can raise ItemNotFound
+            self.document.uri = self.scan_uri()  # New URI
 
-        self.process(document)
-        document.save()
+        await self.process(batch=batch)
 
-        return document
+        if not batch:
+            # Batch operations can create transient documents.
+            # Saving them could raise integrity errors from the database.
+            self.document.save()
 
-    def rename(self, target: Path) -> Document:
+        if create:
+            message = "Created new %s: %s"
+            logger.info(message, self.document.doc_type, self.document.uri)
+        elif uri:
+            message = "Renamed and updated existing %s: %s"
+            logger.info(message, self.document.doc_type, self.document.uri)
+        else:
+            message = "Updated existing %s: %s"
+            logger.info(message, self.document.doc_type, self.document.uri)
+
+        return self.document
+
+    async def rename(self, target: Path, *, batch: bool = False) -> Document:
         """Rename (and update) document in database.
 
         :param target: the new path of document's source file.
@@ -290,21 +409,24 @@ class BaseDocumentHandler(ABC):
         """
         # TODO: Set-up an HTTP redirection (01/2019)
         uri = self.scan_uri()
-        handler = self.__class__(target, self.reader, self.prompt)
-        return handler.update(uri)
+        handler = self.__class__(target, reader=self.reader, prompt=self.prompt)  # noqa: E501
+        return await handler.update(uri, batch=batch)
 
     def delete(self) -> None:
         """Remove a document from database.
 
+        :return: URI of the deleted document.
         :raise ~.ItemNotFound: if the document doesn't exist.
         """
-        uri = self.scan_uri()
-        document = self.model.find(uri=uri)  # Can raise ItemNotFound
-        document.delete()
+        uri = self.document.uri
+        doc_type = self.document.doc_type
+
+        self.document.delete()  # Can raise ItemNotFound
+        logger.info("Deleted %s: %s", doc_type, uri)
 
     # Helpers
 
-    def load(self):
+    async def load(self) -> 'BaseDocumentSourceParser':
         """Read and prepare for parsing the source file located at :attr:`path`.
 
         :raise ~.DocumentLoadingError:
@@ -312,23 +434,25 @@ class BaseDocumentHandler(ABC):
             (e.g., file not found or unsupported format).
         """  # noqa: E501
         try:
-            with self.reader(self.path) as f:
-                source = f.read()
+            async with self.reader(self.path) as source_file:
+                source = await source_file.read()
         except (OSError, UnicodeDecodeError) as exc:
             raise exceptions.DocumentLoadingError(self, exc)
 
         return self.parser(source)
 
     @abstractmethod
-    def process(self, document: Document) -> None:
-        """Parse :attr:`path` and update a document already loaded from database.
+    async def process(self, *, batch: bool = False) -> None:
+        """Parse :attr:`path` and update :attr:`document`'s attributes.
 
-        :param document: the document to update.
-        """  # noqa: E501
+        :param batch:
+            set to ``True`` to delay some actions requiring user input.
+            Useful when several documents are processed in parallel.
+        """
 
     # Path Scanners
     # Always process paths from right to left,
-    # to be able to process absolute or relative paths.
+    # to be able to handle absolute or relative paths.
 
     def scan_uri(self) -> str:
         """Return document's URI, based on its :attr:`path`."""
@@ -339,7 +463,7 @@ class BaseDocumentSourceParser:
     """Parse HTML source of a document.
 
     :raise ~.DocumentMalformatted: when the given source is not valid HTML.
-    """
+    """  # noqa: E501
 
     def __init__(self, source: str):
         try:
@@ -378,16 +502,29 @@ class BaseDocumentSourceParser:
 
 # Document Reading
 
-class BaseDocumentReader(ABC):
-    """Base class for all document readers.
+class BaseDocumentReader(ABC, BaseCommandLine):
+    """Base class for external document readers.
 
-    Provides a subset of :func:`open`'s API.
+    Provides a subset of :func:`aiofiles.open`'s API.
 
-    :param pathlib.Path path:
-        path of the document to read. Initialized by :meth:`__call__`.
+    Every reader relies on a :attr:`~program` installed locally, to open, read
+    and if necessary convert documents on the fly to HTML format. The result of
+    the conversion should be displayed on the standard output.
+
+    :param shell:
+        alternative shell to run the reader's :attr:`~program`. Must have a
+        similar API to :func:`asyncio.create_subprocess_shell`.
     """
 
-    def __init__(self):
+    #: Name of the reader's binary to execute for reading documents.
+    program: ClassVar[str] = None
+    #: Default arguments to use when running the reader's program.
+    arguments: ClassVar[str] = None
+
+    def __init__(self, shell: Callable = None):
+        BaseCommandLine.__init__(self, shell)
+
+        #: Path of the document to read. Set by :meth:`__call__`.
         self.path = None
 
     def __call__(self, path: Union[str, Path]) -> 'DocumentOpener':
@@ -395,28 +532,35 @@ class BaseDocumentReader(ABC):
 
         Can be called directly or used as a context manager.
 
-        :raise OSError: if the document cannot be opened.
+        :raise FileNotFoundError: when the document cannot be opened.
         """
         path = Path(path)
 
         if not path.is_file():
-            raise OSError(f"Document doesn't exist: {path}")
+            raise FileNotFoundError(f"Document doesn't exist: {path}")
 
         self.path = Path(path)
         return DocumentOpener(self)
 
-    @abstractmethod
-    def read(self) -> str:
-        """Effectively read the document located at :attr:`path`.
+    async def read(self) -> str:
+        """Read and convert to HTML the document located at :attr:`path`.
 
-        The returned string must be in HTML format.
-
-        :raise ValueError: when cannot read the document's content.
+        :raise OSError:
+            if the reader's :attr:`~program` cannot convert the document.
+        :raise UnicodeDecodeError:
+            when the conversion's result is invalid.
         """
+        assert self.path is not None, "Open a file before trying to read it"
+
+        cmdline = self.arguments.format(path=self.path)
+        # Can raise OSError or UnicodeDecodeError.
+        html = await self.run(cmdline)
+
+        return html.strip()
 
 
 @dataclass
-class DocumentOpener(AbstractContextManager):
+class DocumentOpener(AbstractAsyncContextManager):
     """Helper for :class:`BaseDocumentReader` to open documents.
 
     :param reader: reader instance opening the document.
@@ -428,10 +572,10 @@ class DocumentOpener(AbstractContextManager):
         """Let :attr:`reader` opening a document as a function call."""
         return getattr(self.reader, name)
 
-    def __enter__(self) -> BaseDocumentReader:
+    async def __aenter__(self) -> BaseDocumentReader:
         """Let :attr:`reader` opening a document inside a context manager."""
         return self.reader
 
-    def __exit__(self, *exc) -> None:
+    async def __aexit__(self, *exc) -> None:
         """Nothing done here for the moment..."""
         return
