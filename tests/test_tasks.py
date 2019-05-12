@@ -16,7 +16,7 @@ WEB_SERVER_URL = 'http://localhost:5000'
 
 # Tests
 
-def test_compile_css(invoke, tmpdir):
+def test_compile_css(invoke, sass, tmpdir):
     css = tmpdir.join('stylesheet.css')
     invoke.run(f'compile-css --css-file {css}')
     assert css.size() > 0

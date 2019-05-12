@@ -17,6 +17,9 @@
 This repository contains the source code of my website. But not only! This is also a
 sandbox where I like to experiment new things, especially fancy testing strategies 🌶
 
+[link=https://travis-ci.org/arugifa/website]
+image::https://api.travis-ci.org/arugifa/website.svg?branch=master[CI Build]
+
 
 == Overview
 

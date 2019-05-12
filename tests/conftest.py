@@ -114,6 +114,14 @@ def prompt():
     return TestingPrompt()
 
 
+@pytest.fixture(scope='session')
+@integration_test
+def sass():
+    """Execute commands with Sass."""
+    # XXX: Check if Sassc is installed? (05/2019)
+    return CommandLine('sassc')
+
+
 @pytest.fixture
 def shell():
     """Dependency to inject in the codebase when external programs have to be executed."""  # noqa: E501
