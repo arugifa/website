@@ -64,12 +64,29 @@ Under the hood, no magic, only technologies that I carefully selected for many r
 == Getting Started
 
 Want to give it a try? The only things you need to install on your computer are
-**Python 3.7+** and {tox}[Tox]. Then you are ready to go with a couple of commands:
+**Python 3.8** and {tox}[Tox]. Then you are ready to go with a couple of commands:
 
 [source,shell]
 ----
-tox -e dev --notest && . venv/bin/activate  # Set-up a virtual env
-invoke demo  # To launch a demo server on http://localhost:5000
+tox -e dev --notest && . venv/bin/activate  # Set-up a development environment
+invoke demo  # Launch a demo server on http://localhost:5000
 ----
 
-That's it (for the moment)! 😉
+
+=== Running Tests
+
+If you use Archlinux and Pikaur, install acceptance/integration test
+dependencies with:
+
+[source,shell]
+----
+pikaur -S $(< archlinux.lock)
+bower install
+----
+
+Then run the tests inside your development environment with:
+
+[source,shell]
+----
+pytest
+----
