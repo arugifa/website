@@ -63,30 +63,24 @@ Under the hood, no magic, only technologies that I carefully selected for many r
 
 == Getting Started
 
-Want to give it a try? The only things you need to install on your computer are
-**Python 3.8** and {tox}[Tox]. Then you are ready to go with a couple of commands:
+Want to give it a try? You are ready to go with a couple of commands:
 
 [source,shell]
 ----
-tox -e dev --notest && . venv/bin/activate  # Set-up a development environment
-invoke demo  # Launch a demo server on http://localhost:5000
-----
-
-
-=== Running Tests
-
-If you use Archlinux and Pikaur, install acceptance/integration test
-dependencies with:
-
-[source,shell]
-----
+# Install system dependencies.
 pikaur -S $(< archlinux.lock)
 bower install
-----
 
-Then run the tests inside your development environment with:
+# Set-up a development environment.
+tox -e dev --notest && . venv/bin/activate
 
-[source,shell]
-----
+# Launch a demo server on http://localhost:5000
+invoke compile_css
+invoke demo
+
+# Run tests.
 pytest
 ----
+
+If you use another distribution than Archlinux, have a look inside
+`archlinux.lock`, and install system dependencies manually instead! 😉
