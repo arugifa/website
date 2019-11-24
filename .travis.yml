@@ -1,8 +1,8 @@
 dist: xenial
 language: python
 python:
-  - "3.7"
+  - "3.8"
 install:
   - pip install tox
 script:
-  - tox -e py37 -- -m "not acceptance and not integration"
+  - tox -e py38 -- -m "not acceptance and not integration"
