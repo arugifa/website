@@ -18,7 +18,7 @@ SOURCE_CODE = here / 'website'
 CSS_FILE = SOURCE_CODE / 'static/stylesheet.css'
 FLASK_APP = here / 'manage.py'
 FROZEN_WEBSITE = here / 'freezer'
-SASS_FILE = SOURCE_CODE / 'stylesheets/main.scss'
+SASS_FILE = here / 'stylesheets/main.scss'
 
 
 class VerboseTask(Task):
