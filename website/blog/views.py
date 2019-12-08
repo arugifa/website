@@ -1,4 +1,4 @@
-"""Web pages of my blog."""
+"""Blog's web pages."""
 
 from flask import abort, render_template
 

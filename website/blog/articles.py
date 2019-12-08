@@ -1,4 +1,4 @@
-"""Manage content updates of my blog."""
+"""Blog's helpers to manage content updates."""
 
 import logging
 import re

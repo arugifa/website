@@ -1,4 +1,4 @@
-"""Collection of helper functions specific to the blog."""
+"""Blog's test helpers."""
 
 from datetime import date, timedelta
 from typing import List

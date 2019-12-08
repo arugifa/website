@@ -1,7 +1,7 @@
 from pytest_bdd import given, scenario, then, when
 from pytest_bdd.parsers import re as parse_regex
 
-from website.helpers import create_articles
+from website.blog.test import create_articles
 
 
 # Scenarios

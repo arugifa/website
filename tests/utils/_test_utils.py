@@ -19,7 +19,7 @@ class BaseCommandLineTest(ABC):
         Meant to be used by test methods defined in this base class.
         """
 
-    # Is program installed?
+    # Is the program installed?
 
     async def test_program_is_installed(self, program_factory, shell):
         program = program_factory(shell=shell)

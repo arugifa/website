@@ -1,8 +1,8 @@
-"""Collection of high-level helpers."""
+"""Collection of functions to set-up a demo environment."""
 
 from flask import Flask
 
-from website.blog.helpers import create_articles
+from website.blog.test import create_articles
 
 
 def setup_demo(app: Flask, item_count: int = 10) -> None:

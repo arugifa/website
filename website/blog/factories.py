@@ -1,4 +1,4 @@
-"""Factories to create blog articles during testing."""
+"""Blog's factories to create dynamic fixtures during testing."""
 
 from datetime import date
 

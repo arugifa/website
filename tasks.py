@@ -9,7 +9,7 @@ from invoke import Task, task
 
 from website import create_app, db as _db
 from website.config import DevelopmentConfig
-from website.helpers import setup_demo
+from website.demo import setup_demo
 
 here = Path(__file__).parent
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 SOURCE_CODE = here / 'website'
 CSS_FILE = SOURCE_CODE / 'static/stylesheet.css'
 FLASK_APP = here / 'manage.py'
-FROZEN_WEBSITE = here / 'frozen'
+FROZEN_WEBSITE = here / 'freezer'
 SASS_FILE = SOURCE_CODE / 'stylesheets/main.scss'
 
 

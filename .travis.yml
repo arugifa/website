@@ -5,4 +5,4 @@ python:
 install:
   - pip install tox
 script:
-  - tox -e py38 -- -m "not acceptance and not integration"
+  - tox -e py38 -- -m "not acceptance and not asciidoctor and not sass"

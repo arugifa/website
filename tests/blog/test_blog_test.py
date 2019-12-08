@@ -1,8 +1,8 @@
-from website.blog import helpers
+from website.blog import test
 
 
 def test_create_articles(db):
-    articles = helpers.create_articles(3)
+    articles = test.create_articles(3)
 
     assert len(articles) == 3
 

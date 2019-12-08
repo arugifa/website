@@ -2,14 +2,19 @@ import inspect
 import re
 from pathlib import Path
 
+import openstack
+import openstack.exceptions
 import pytest
 pytest.register_assert_rewrite('website.test.integration')  # Rewrite helper assertions
 import webtest
 
 from website import create_app, db as _db
 from website.config import TestingConfig
-from website.test.integration import CommandLine, TestingPrompt, TestingShell
-from website.test.local_fixtures import FileFixtureCollection
+from website.deployment.factories import BaseCloudFactory
+from website.deployment.test import FakeNetwork, CloudStubConnectionFactory
+from website.deployment.update import CloudFilesManager
+from website.test.cmdline import CommandLine, TestingPrompt, TestingShell
+from website.test.fixtures import FileFixtureCollection
 from website.test.pytest import FixtureMarker
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
 
@@ -19,6 +24,20 @@ integration_test = FixtureMarker()
 
 # Pytest Configuration
 # ====================
+
+def pytest_generate_tests(metafunc):
+    """Use stubs when needed."""
+    # TODO: Raise error if interface tests are not run (12/2019).
+    # Happens when stub test files are renamed for example.
+
+    if 'cloud' in metafunc.fixturenames:
+        if metafunc.module.__name__ == 'test_deployment_stubs':
+            params = ['stub', 'original']
+        else:
+            params = ['stub']
+
+        metafunc.parametrize('cloud_client', params, indirect=True)
+
 
 def pytest_collection_modifyitems(items):
     """Apply dynamic test markers."""
@@ -89,7 +108,48 @@ def db(app):
         _db.drop_all()
 
 
-# Integration Tests
+# Cloud Tests
+
+@pytest.fixture
+def cloud_client(network, request):
+    """Parametrize Cloud connections.
+
+    Use a stub for most of the tests, and only connect to the Cloud for interface tests.
+    """
+    if request.param == 'stub':
+        connection_factory = CloudStubConnectionFactory(network)
+    elif request.param == 'original':
+        connection_factory = openstack.connect
+    else:
+        raise ValueError(request.param)
+
+    client = BaseCloudFactory._meta.cloud
+    client.reset(factory=connection_factory)
+    return client
+
+
+@pytest.fixture
+@integration_test
+def cloud(cloud_client):
+    """Return a Cloud connection."""
+    yield cloud_client.connection
+    cloud_client.clean()
+
+
+@pytest.fixture
+def network():
+    """Simulate network disturbances in the Cloud."""
+    return FakeNetwork()
+
+
+@pytest.fixture
+def object_store(cloud):
+    """Return an Object Store to test with."""
+    cloud.object_store.create_container('test_files')
+    return CloudFilesManager(cloud, 'test_files')
+
+
+# Command-line Tests
 
 @pytest.fixture  # Async fixtures can only be function-scoped
 @integration_test

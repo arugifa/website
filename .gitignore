@@ -16,7 +16,7 @@ venv/
 website/static/
 
 # Frozen-Flask
-frozen/
+freezer/
 
 # Bower
 bower_components/

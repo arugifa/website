@@ -1,10 +1,10 @@
-"""Blog models."""
+"""Blog's database models."""
 
 from operator import attrgetter
 from typing import Iterable, Iterator
 
 from sortedcontainers import SortedKeyList
-from sqlalchemy import func
+# from sqlalchemy import func
 from sqlalchemy.ext.hybrid import hybrid_property
 
 from website import db
@@ -82,6 +82,16 @@ class Tag(BaseModel):
     name = db.Column(db.String, nullable=False)
     articles = db.relationship(
         'Article', secondary='article_tags', back_populates='_tags')
+
+    # TODO: write test in content update manager (03/2019)
+    # @classmethod
+    # def delete_orphans(cls) -> int:
+    #     """Delete tags not associated with any other documents.
+
+    #     :return: number of tags deleted.
+    #     """
+    #     # Thanks to https://stackoverflow.com/a/18193592/2987526
+    #     return db.session.query(Tag).having(func.count(Article.id) == 0).delete()  # noqa: E501
 
 
 # Many-to-Many Relationships

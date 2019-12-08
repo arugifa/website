@@ -4,7 +4,7 @@ from pathlib import PurePath
 import pytest
 
 from website import exceptions
-from website.blog.content import ArticleHandler, ArticleSourceParser
+from website.blog.articles import ArticleHandler, ArticleSourceParser
 from website.blog.factories import ArticleFactory, CategoryFactory, TagFactory
 from website.blog.models import Article
 

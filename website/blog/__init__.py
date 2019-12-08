@@ -1,4 +1,4 @@
-"""Everything related to my blog."""
+"""Blog's module."""
 
 from flask import Blueprint
 
