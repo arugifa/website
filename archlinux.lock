@@ -1,6 +1,7 @@
 asciidoctor
 bower
 geckodriver
+git
 python
 python-tox
 sassc
