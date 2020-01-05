@@ -17,6 +17,7 @@ from website.test.cmdline import CommandLine, TestingPrompt, TestingShell
 from website.test.fixtures import FileFixtureCollection
 from website.test.pytest import FixtureMarker
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
+from website.utils.git import GitRepository
 
 here = Path(__file__).parent.resolve()
 integration_test = FixtureMarker()
@@ -151,13 +152,18 @@ def object_store(cloud):
 
 # Command-line Tests
 
-@pytest.fixture  # Async fixtures can only be function-scoped
+@pytest.fixture(scope='session')
 @integration_test
-async def asciidoctor():
-    """Check if Asciidoctor is installed when running tests."""
-    asciidoctor = AsciidoctorToHTMLConverter()
-    assert await asciidoctor.is_installed()
-    return asciidoctor
+def asciidoctor():
+    """Return an Asciidoctor wrapper."""
+    return AsciidoctorToHTMLConverter()
+
+
+@pytest.fixture(scope='session')
+@integration_test
+def git():
+    """Return a Git wrapper."""
+    return GitRepository
 
 
 @pytest.fixture(scope='session')
