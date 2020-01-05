@@ -70,8 +70,8 @@ class TestCloudFilesManager:
 
     # Add files.
 
-    def test_add_files(self, object_store, static_files):
-        objs = object_store.add(static_files)
+    async def test_add_files(self, object_store, static_files):
+        objs = await object_store.add(static_files)
 
         assert len(objs) == 3
 
@@ -84,13 +84,13 @@ class TestCloudFilesManager:
         assert objs[2].name == str(static_files[1])
         assert objs[2].data == b"I'm John Doe."
 
-    def test_add_files_with_new_names(self, object_store, static_files):
+    async def test_add_files_with_new_names(self, object_store, static_files):
         static_files = [
             (static_files[0], 'static/hello_world.txt'),
             (static_files[1], 'static/john_doe.txt'),
         ]
 
-        objs = object_store.add(static_files)
+        objs = await object_store.add(static_files)
 
         assert len(objs) == 2
 
@@ -100,24 +100,24 @@ class TestCloudFilesManager:
         assert objs[1].name == 'static/john_doe.txt'
         assert objs[1].data == b"I'm John Doe."
 
-    def test_add_file_with_missing_source(self, object_store, tmp_path):
+    async def test_add_file_with_missing_source(self, object_store, tmp_path):
         static_file = tmp_path / 'missing.txt'
 
         with pytest.raises(OSError):
-            object_store.add([static_file])
+            await object_store.add([static_file])
 
     # Replace files.
 
-    def test_replace_files(self, object_store, static_files):
+    async def test_replace_files(self, object_store, static_files):
         # Fixtures
-        object_store.add(static_files)
+        await object_store.add(static_files)
         timestamp = datetime.now().isoformat()
 
         static_files[0].write_text("Hello, Galaxy!")
         static_files[1].write_text("I'm Jane Doe.")
 
         # Test
-        objs = object_store.replace(static_files)
+        objs = await object_store.replace(static_files)
 
         assert len(objs) == 2
 
@@ -129,21 +129,21 @@ class TestCloudFilesManager:
         assert objs[1].data == b"I'm Jane Doe."
         assert objs[1].last_modified_at > timestamp
 
-    def test_replace_files_with_different_names(
+    async def test_replace_files_with_different_names(
             self, object_store, static_files):
         # Fixtures
         static_files = [
             (static_files[0], 'static/hello_world.txt'),
             (static_files[1], 'static/john_doe.txt'),
         ]
-        object_store.add(static_files)
+        await object_store.add(static_files)
         timestamp = datetime.now().isoformat()
 
         # Test
         static_files[0][0].write_text("Hello, Galaxy!")
         static_files[1][0].write_text("I'm Jane Doe.")
 
-        objs = object_store.replace(static_files)
+        objs = await object_store.replace(static_files)
 
         assert len(objs) == 2
 
@@ -155,54 +155,54 @@ class TestCloudFilesManager:
         assert objs[1].data == b"I'm Jane Doe."
         assert objs[1].last_modified_at > timestamp
 
-    def test_only_replace_files_with_changes(self, object_store, static_files):
+    async def test_only_replace_files_with_changes(self, object_store, static_files):
         assert len(static_files) > 1
-        object_store.add(static_files)
+        await object_store.add(static_files)
         timestamp = datetime.now().isoformat()
 
         static_files[0].write_text("Hello, Galaxy!")
-        objs = object_store.replace(static_files)
+        objs = await object_store.replace(static_files)
 
         assert len(objs) == 1
         assert objs[0].name == str(static_files[0])
         assert objs[0].data == b"Hello, Galaxy!"
         assert objs[0].last_modified_at > timestamp
 
-    def test_replace_not_existing_files(self, object_store, static_files):
+    async def test_replace_not_existing_files(self, object_store, static_files):
         with pytest.raises(exceptions.CloudFileNotFound):
-            object_store.replace(static_files)
+            await object_store.replace(static_files)
 
-    def test_replace_file_with_missing_source(self, object_store, tmp_path):
+    async def test_replace_file_with_missing_source(self, object_store, tmp_path):
         static_file = tmp_path / 'deleted.txt'
         static_file.touch()
 
-        object_store.add([static_file])
+        await object_store.add([static_file])
         static_file.unlink()
 
         with pytest.raises(OSError):
-            object_store.replace([static_file])
+            await object_store.replace([static_file])
 
-    def test_error_happening_during_replacement(
+    async def test_error_happening_during_replacement(
             self, network, object_store, static_files):
         with network.unplug(), pytest.raises(exceptions.CloudError):
-            object_store.replace(static_files)
+            await object_store.replace(static_files)
 
     # Delete files.
 
-    def test_delete_files(self, object_store, static_files):
-        object_store.add(static_files)
-        object_store.delete(static_files)
+    async def test_delete_files(self, object_store, static_files):
+        await object_store.add(static_files)
+        await object_store.delete(static_files)
 
         with pytest.raises(exceptions.CloudFileNotFound):
-            object_store.delete(static_files[:1])
+            await object_store.download(str(static_files[0]))
 
         with pytest.raises(exceptions.CloudFileNotFound):
-            object_store.delete(static_files[-1:])
+            await object_store.download(str(static_files[1]))
 
-    def test_delete_not_existing_file(self, object_store):
+    async def test_delete_not_existing_file(self, object_store):
         with pytest.raises(exceptions.CloudFileNotFound):
-            object_store.delete(['missing.txt'])
+            await object_store.delete(['missing.txt'])
 
-    def test_error_happening_during_deletion(self, network, object_store):
+    async def test_error_happening_during_deletion(self, network, object_store):
         with network.unplug(), pytest.raises(exceptions.CloudError):
-            object_store.delete(['outage.txt'])
+            await object_store.delete(['outage.txt'])

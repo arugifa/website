@@ -41,7 +41,8 @@ class CloudFilesManager:
 
     # Main API
 
-    def add(self, new: FileUploads) -> List[CloudObject]:
+    # TODO: Use *args instead of list for new files (01/2020)
+    async def add(self, new: FileUploads) -> List[CloudObject]:
         """Add files to the :attr:`container`.
 
         New names can be given to the files, by using tuples, e.g.::
@@ -63,23 +64,20 @@ class CloudFilesManager:
             self.print(f"- {dst}")
             return obj
 
-        async def main(new):
-            to_add = []
+        to_add = []
 
-            for static_file in sorted(new):
-                try:
-                    src, dst = static_file
-                except TypeError:
-                    to_add.append(upload(static_file))
-                else:
-                    to_add.append(upload(src, dst))
+        for static_file in sorted(new):
+            try:
+                src, dst = static_file
+            except TypeError:
+                to_add.append(upload(static_file))
+            else:
+                to_add.append(upload(src, dst))
 
-            self.print("Uploading new files:")
-            return await asyncio.gather(*to_add)
+        self.print("Uploading new files:")
+        return await asyncio.gather(*to_add)
 
-        return asyncio.run(main(new))
-
-    def replace(self, existing: FileUploads) -> List[CloudObject]:
+    async def replace(self, existing: FileUploads) -> List[CloudObject]:
         """Replace existing files inside the :attr:`container`.
 
         If remote names differ from local names, tuples can be used, e.g.::
@@ -110,26 +108,21 @@ class CloudFilesManager:
                 self.print(f"- {dst}")
                 return obj
 
-        async def main(existing):
-            to_replace = []
+        to_replace = []
 
-            for static_file in existing:
-                try:
-                    src, dst = static_file
-                except TypeError:
-                    src = static_file
-                    dst = str(static_file)
+        for static_file in existing:
+            try:
+                src, dst = static_file
+            except TypeError:
+                src = static_file
+                dst = str(static_file)
 
-                to_replace.append(replace(src, dst))
+            to_replace.append(replace(src, dst))
 
-            self.print("Replacing outdated files:")
-            replaced = [obj for obj in await asyncio.gather(*to_replace) if obj]
+        self.print("Replacing outdated files:")
+        return [obj for obj in await asyncio.gather(*to_replace) if obj]
 
-            return replaced
-
-        return asyncio.run(main(existing))
-
-    def delete(self, existing: Iterable[Union[Path, str]]) -> None:
+    async def delete(self, existing: Iterable[Union[Path, str]]) -> None:
         """Remove files from the :attr:`container`.
 
         :raise ~.CloudFileNotFound:
@@ -145,15 +138,13 @@ class CloudFilesManager:
             self.print(f"- {dst}")
             return obj
 
-        async def main(existing):
-            to_delete = [
-                delete(str(static_file))
-                for static_file in sorted(existing)
-            ]
-            self.print("Deleting extra files:")
-            return await asyncio.gather(*to_delete)
+        to_delete = [
+            delete(str(static_file))
+            for static_file in sorted(existing)
+        ]
 
-        return asyncio.run(main(existing))
+        self.print("Deleting extra files:")
+        await asyncio.gather(*to_delete)
 
     # Helpers
 
