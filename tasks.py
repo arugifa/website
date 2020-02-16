@@ -50,7 +50,7 @@ class VerboseTask(Task):
         return arg_names, spec_dict
 
 
-# Development Servers
+# Development Server
 
 @task
 def run(ctx):
@@ -68,6 +68,8 @@ def run(ctx):
     app = create_app(DevelopmentConfig)
     app.run(debug=True)
 
+
+# Demo Server
 
 @task
 def demo(ctx):

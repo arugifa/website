@@ -3,10 +3,10 @@
 See https://asciidoctor.org/ to get more insights.
 """
 
-from website.content import BaseDocumentReader
+from website.base.readers import BaseDocumentFileReader
 
 
-class AsciidoctorToHTMLConverter(BaseDocumentReader):
+class AsciidoctorToHTMLConverter(BaseDocumentFileReader):
     """Asciidoctor to HTML converter, using ``asciidoctor`` command-line tool.
 
     Can be used as follows::

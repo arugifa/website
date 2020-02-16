@@ -2,7 +2,7 @@ import pytest
 
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
 
-from tests._test_content import BaseDocumentReaderTest  # noqa: I100
+from tests.base._test_readers import BaseDocumentReaderTest  # noqa: I100
 
 
 class TestAsciidoctorToHTMLConverter(BaseDocumentReaderTest):

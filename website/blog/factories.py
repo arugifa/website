@@ -2,15 +2,15 @@
 
 from datetime import date
 
-from factory import LazyFunction, List, Sequence, SubFactory
+from factory import LazyFunction, Sequence
 
-from website.blog import models
-from website.factories import BaseDatabaseFactory
+from website.base.factories import BaseDocumentFactory
+from website.blog.models import Article
 
 
-class ArticleFactory(BaseDatabaseFactory):
+class ArticleFactory(BaseDocumentFactory):
     class Meta:
-        model = models.Article
+        model = Article
 
     uri = Sequence(lambda n: f'article_{n+1}')  # Don't start from 0 during demo
 
@@ -20,22 +20,3 @@ class ArticleFactory(BaseDatabaseFactory):
 
     publication_date = LazyFunction(date.today)
     last_update = None
-
-    category = SubFactory('website.blog.factories.CategoryFactory')
-    tags = List([SubFactory('website.blog.factories.TagFactory') for _ in range(2)])
-
-
-class CategoryFactory(BaseDatabaseFactory):
-    class Meta:
-        model = models.Category
-
-    uri = Sequence(lambda n: f'category_{n+1}')  # Don't start from 0 during demo
-    name = Sequence(lambda n: f"Category {n+1}")
-
-
-class TagFactory(BaseDatabaseFactory):
-    class Meta:
-        model = models.Tag
-
-    uri = Sequence(lambda n: f'tag_{n+1}')  # Don't start from 0 during demo
-    name = Sequence(lambda n: f"Tag {n+1}")

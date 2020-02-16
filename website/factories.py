@@ -1,18 +1,20 @@
-"""Base classes to be inherited by factories all over the project."""
+from factory import Sequence
 
-from factory.alchemy import SQLAlchemyModelFactory
+from website.base.factories import BaseDatabaseFactory
+from website.models import Category, Tag
 
-from website import db
 
-
-class BaseDatabaseFactory(SQLAlchemyModelFactory):
-    """Base factory for every model."""
-
+class CategoryFactory(BaseDatabaseFactory):
     class Meta:
-        abstract = True
-        sqlalchemy_session = db.session
+        model = Category
 
-        # Database session is committed after fixtures creation.
-        # So we don't have to do it manually, when playing around
-        # in a Flask shell for example...
-        sqlalchemy_session_persistence = 'commit'
+    uri = Sequence(lambda n: f'category_{n+1}')  # Don't start from 0 during demo
+    name = Sequence(lambda n: f"Category {n+1}")
+
+
+class TagFactory(BaseDatabaseFactory):
+    class Meta:
+        model = Tag
+
+    uri = Sequence(lambda n: f'tag_{n+1}')  # Don't start from 0 during demo
+    name = Sequence(lambda n: f"Tag {n+1}")

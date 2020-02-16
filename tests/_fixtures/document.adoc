@@ -1,5 +1,6 @@
 = Standard Document
-:keywords: asciidoctor, tests
+:description: testing
+:keywords: asciidoctor, handlers, processors, parsers
 
 To be standard or not to be...
 

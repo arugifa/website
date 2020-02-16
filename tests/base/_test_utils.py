@@ -7,7 +7,7 @@ from typing import Union
 
 import pytest
 
-from website.utils import BaseCommandLine
+from website.base.utils import BaseCommandLine
 
 
 class BaseCommandLineTest(ABC):
