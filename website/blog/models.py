@@ -9,6 +9,7 @@ from website.base.models import BaseDocument, TagList
 
 # Models
 
+# TODO: Add unique condition on URI + date
 class Article(BaseDocument):
     """Blog article."""
 

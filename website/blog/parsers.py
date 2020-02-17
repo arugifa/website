@@ -1,4 +1,4 @@
-"""Blog's helpers to manage content updates."""
+"""Blog source parsers."""
 
 import re
 

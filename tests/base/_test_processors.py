@@ -25,16 +25,16 @@ class BaseDocumentFileProcessorTest(ABC):
     def test_process_file(self):
         pass
 
-    # Catch processing errors.
+    # Collect errors.
 
-    async def test_catch_processing_errors(self, app, tmp_path):
+    async def test_collect_errors(self, app, tmp_path):
         source_file = tmp_path / 'invalid_document.html'
         source_file.write_text("Invalid document")
 
         processor = self.processor(source_file)
         error_count = 0
 
-        with processor.catch_processing_errors() as errors:
+        with processor.collect_errors() as errors:
             for name, method in inspect.getmembers(processor):
                 if name.startswith('process_'):
                     result = await method()  # Should probably raise

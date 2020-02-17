@@ -75,8 +75,13 @@ class FileFixture(PathLike):
 
         return FileFixture(target, self.collection)
 
+    # TODO: Rename to rename() (01/2020)
     def move(self, target: Union[str, Path]) -> None:
         self.path = self.symlink(target).path
 
+    def rename(self, target: Union[str, Path]) -> None:
+        self.path = self.symlink(target).path
+
+    # TODO: Remove and rename copy() to copy(target, symlink=True/False)
     def symlink(self, target: Union[str, Path]) -> 'FileFixture':
         return self.copy(target, shallow=True)

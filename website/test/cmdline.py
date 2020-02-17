@@ -8,7 +8,6 @@ from typing import Callable, Mapping, Tuple, Union
 
 from faker import Faker
 
-from website.content import DocumentPrompt
 from website.test.stubs import stub
 
 
@@ -44,35 +43,6 @@ class CommandLine:
         cmdline = arguments.split()
         cmdline.insert(0, self.program)
         return cmdline
-
-
-class TestingPrompt(DocumentPrompt):
-    """Prompt to be injected in the codebase when user input is needed."""
-
-    def __init__(self):
-        input = TestingPromptInput()
-        DocumentPrompt.__init__(self, input=input)
-
-    def add_answers(self, answers: Mapping[str, str]) -> None:
-        self.input.answers.update({
-            re.compile(question): answer
-            for question, answer in answers.items()
-        })
-
-
-class TestingPromptInput:
-    """Input function for :class:`.TestingPrompt`."""
-
-    def __init__(self):
-        self.answers = {}
-
-    @stub(input, classified=True)
-    def __call__(self, prompt=None):
-        for question, answer in self.answers.items():
-            if question.search(prompt):
-                return answer
-
-        return fake.word()
 
 
 @stub(asyncio.create_subprocess_shell)

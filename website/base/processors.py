@@ -3,7 +3,8 @@
 from abc import ABC, abstractmethod, abstractproperty
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, ClassVar, Dict, Iterable, List, Optional
+from typing import (
+    Any, Callable, ClassVar, Dict, Iterable, List, Optional, Set, Tuple, Union)
 
 import aiofiles
 import lxml.html
@@ -11,10 +12,12 @@ import lxml.html
 from website import exceptions
 from website.base.models import BaseDocument
 from website.base.parsers import BaseDocumentSourceParser
+from website.exceptions import DocumentParsingError, DocumentProcessingError
 from website.models import Category, Tag
+from website.typing import ProcessingErrorSet, ProcessingResult
 
 
-class CatchProcessingErrors(type):
+class CatchProcessorErrors(type):
     """Meta-class used by all document processors.
 
     Catch errors automatically when calling processing or scanning methods
@@ -30,7 +33,7 @@ class CatchProcessingErrors(type):
             async def wrapper(self, *args, **kwargs):
                 try:
                     return await func(self, *args, **kwargs)
-                except (exceptions.DocumentProcessingError, exceptions.DocumentParsingError) as exc:  # noqa: E501
+                except (DocumentProcessingError, DocumentParsingError) as exc:
                     if not self._catch_errors:
                         raise
 
@@ -60,7 +63,7 @@ class CatchProcessingErrors(type):
         return type.__new__(meta, classname, supers, classdict)
 
 
-class BaseDocumentFileProcessor(metaclass=CatchProcessingErrors):
+class BaseDocumentFileProcessor(metaclass=CatchProcessorErrors):
     """Process document's source to prepare it for later insertion in database.
 
     :param path:
@@ -79,13 +82,13 @@ class BaseDocumentFileProcessor(metaclass=CatchProcessingErrors):
         self.reader = reader
 
         self._source = None  # To cache document's source
-        self._errors = set()  # To store document's processing/parsing errors
+        self._errors = set()  # To store processing/parsing errors
 
-        # To catch potential exceptions when processing the document.
+        # To catch potential exceptions when processing the document's source file.
         self._catch_errors = False
 
     @abstractmethod
-    async def process(self) -> Dict[str, Any]:
+    async def process(self) -> Tuple[ProcessingResult, ProcessingErrorSet]:
         """Analyze document's source file.
 
         :return: document's attributes, as defined in document's model.
@@ -137,15 +140,16 @@ class BaseDocumentFileProcessor(metaclass=CatchProcessingErrors):
     # Helpers
 
     @contextmanager
-    def catch_processing_errors(self):
-        """Catch potential errors when processing document's source file.
+    def collect_errors(self) -> ProcessingErrorSet:
+        """Catch  and return potential errors when processing document's source file.
 
         Can be used as follows::
 
             source_file = BaseDocumentFileProcessor(file_path)
 
-            with source_file.catch_processing_errors() as errors:
-                source_file.process()
+            with source_file.collect_errors() as errors:
+                source_file.process_category()
+                source_file.process_tags()
                 print(errors)
         """
         try:

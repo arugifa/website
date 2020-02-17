@@ -13,7 +13,7 @@ from website.config import TestingConfig
 from website.deployment.factories import BaseCloudFactory
 from website.deployment.test import FakeNetwork, CloudStubConnectionFactory
 from website.deployment.update import CloudFilesManager
-from website.test.cmdline import CommandLine, TestingPrompt, TestingShell
+from website.test.cmdline import CommandLine, TestingShell
 from website.test.fixtures import FileFixtureCollection
 from website.test.pytest import FixtureMarker
 from website.utils.asciidoctor import AsciidoctorToHTMLConverter
@@ -172,12 +172,6 @@ def invoke():
     """Execute commands with Invoke."""
     # XXX: Check if Invoke is installed? (05/2019)
     return CommandLine('invoke')
-
-
-@pytest.fixture
-def prompt():
-    """Dependency to inject in the codebase when user input is needed."""
-    return TestingPrompt()
 
 
 @pytest.fixture(scope='session')

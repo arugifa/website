@@ -26,7 +26,7 @@ class TestArticleFileProcessor(BaseDocumentFileProcessorTest):
         category = CategoryFactory(uri='music')
         tags = [TagFactory(uri=uri) for uri in ['electro', 'funk', 'house']]
 
-        actual = await processor.process()
+        actual, errors = await processor.process()
         expected = {
             'title': "House Music Spirit",
             'category': category,
@@ -50,6 +50,7 @@ class TestArticleFileProcessor(BaseDocumentFileProcessorTest):
         }
 
         assert actual == expected
+        assert errors == set()
 
     # Scan date.
 

@@ -11,6 +11,7 @@ class DatabaseException(WebsiteException):
     """Errors related to the database."""
 
 
+# TODO: Rename to DatabaseLookupError? (02/2020)
 class ItemNotFound(DatabaseException):
     """If a lookup in database for a specific item doesn't return any result."""
 
@@ -45,21 +46,39 @@ class DocumentTitleMissing(DocumentParsingError):
     """When the title of a document is not found in its source file."""
 
 
-class ArticleDateMalformatted(DocumentParsingError):
-    """When syntax errors are found while parsing the date of an article."""
+class DocumentCategoryMissing(DocumentParsingError):
+    """When the category of a document is not found in its source file."""
 
 
-class ArticleCategoryMissing(DocumentParsingError):
-    """When the category of an article is not found in its source file."""
+class DocumentProcessingError(WebsiteException):
+    pass
 
 
-class ArticleLeadMissing(DocumentParsingError):
-    """When the lead paragraph of an article is not found in its source file."""
+class DocumentPathScanningError(DocumentProcessingError):
+    pass
 
 
-class ArticleLeadMalformatted(DocumentParsingError):
-    """When syntax errors are found while parsing the lead paragraph of an article."""
+class DocumentCategoryNotFound(DocumentProcessingError):
+    pass
 
 
-class ArticleBodyMissing(DocumentParsingError):
-    """When the body of an article is not found in its source file."""
+class DocumentTagsNotFound(DocumentProcessingError):
+    pass
+
+
+class InvalidFile(WebsiteException):
+    pass
+
+
+# Update Exceptions
+
+class UpdateAborted(WebsiteException):
+    """When the user cancels an update."""
+
+
+class ContentUpdateException(WebsiteException):
+    """Couldn't update website's content for some reason."""
+
+
+class NoUpdate(WebsiteException):
+    """If not update needs to be run."""

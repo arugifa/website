@@ -1,11 +1,12 @@
 """Blog file processors."""
 
 from datetime import date
-from typing import Any, Dict
+from typing import Tuple
 
 from website.base.processors import BaseDocumentFileProcessor
 from website.blog import exceptions
 from website.blog.parsers import ArticleSourceParser
+from website.typing import ProcessingErrorSet, ProcessingResult
 
 
 class ArticleFileProcessor(BaseDocumentFileProcessor):
@@ -13,7 +14,7 @@ class ArticleFileProcessor(BaseDocumentFileProcessor):
 
     parser = ArticleSourceParser
 
-    async def process(self) -> Dict[str, Any]:
+    async def process(self) -> Tuple[ProcessingResult, ProcessingErrorSet]:
         """Analyze article's source file.
 
         :return:
@@ -21,14 +22,17 @@ class ArticleFileProcessor(BaseDocumentFileProcessor):
         """
         source = await self.load()
 
-        return {
-            'title': source.parse_title(),
-            'category': await self.process_category(),
-            'lead': source.parse_lead(),
-            'body': source.parse_body(),
-            'tags': await self.process_tags(),
-            'publication_date': self.scan_date(),
-        }
+        with self.collect_errors() as fp_errors, source.collect_errors() as sp_errors:
+            result = {
+                'title': source.parse_title(),
+                'category': await self.process_category(),
+                'lead': source.parse_lead(),
+                'body': source.parse_body(),
+                'tags': await self.process_tags(),
+                'publication_date': self.scan_date(),
+            }
+
+        return result, fp_errors | sp_errors
 
     # Path Scanners
 
