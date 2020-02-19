@@ -1,5 +1,6 @@
 """Base classes to manage content life cycle in database."""
 
+import logging
 from abc import ABC
 from pathlib import Path, PurePath
 from typing import Callable, ClassVar, Union
@@ -11,6 +12,8 @@ from website.base.models import BaseDocument
 from website.base.processors import BaseDocumentFileProcessor
 
 DocumentPath = Union[Path, PurePath]  # For prod and tests
+
+logger = logging.getLogger(__name__)
 
 
 class BaseDocumentFileHandler(ABC):
@@ -32,6 +35,8 @@ class BaseDocumentFileHandler(ABC):
     def __init__(self, path: DocumentPath, *, reader: Callable = aiofiles.open):
         #: Processor to analyze document's source file.
         self.source_file = self.processor(path, reader=reader)
+
+        self.logger = CustomAdapter(logger, {'source_file': self.source_file.path})
 
     # Main API
 
@@ -55,9 +60,11 @@ class BaseDocumentFileHandler(ABC):
         processing, errors = await self.source_file.process()
 
         if errors:
+            self.logger.error(f"Could not process file")
             raise exceptions.InvalidFile(self.source_file.path, errors)
 
         document.update(**processing)
+        self.logger.info(f"Inserted document in database")
 
         return document
 
@@ -77,9 +84,11 @@ class BaseDocumentFileHandler(ABC):
         processing, errors = await self.source_file.process()
 
         if errors:
+            self.logger.error("Could not process file")
             raise exceptions.InvalidFile(self.source_file.path, errors)
 
         document.update(**processing)
+        self.logger.info(f"Updated document in database")
 
         return document
 
@@ -102,7 +111,9 @@ class BaseDocumentFileHandler(ABC):
 
         new_handler = self.__class__(target, reader=self.source_file.reader)
         new_uri = new_handler.source_file.scan_uri()
+
         document.update(uri=new_uri)
+        self.logger.info(f"Renamed document in database to {document.uri}")
 
         return await new_handler.update()  # Can raise InvalidFile
 
@@ -113,6 +124,7 @@ class BaseDocumentFileHandler(ABC):
         """
         document = self.look_in_db()  # Can raise ItemNotFound
         document.delete()
+        self.logger.info(f"Deleted document in database")
 
     # Helpers
 

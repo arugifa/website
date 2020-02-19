@@ -5,7 +5,65 @@ import re
 import sys
 from abc import ABC, abstractmethod
 from collections import deque
-from typing import Callable, Dict, TextIO, Union
+from contextlib import AbstractAsyncContextManager
+from typing import Any, Callable, ClassVar, Dict, TextIO, Union
+
+from website import exceptions
+
+
+class BaseUpdateRunner:
+    def __init__(self, manager, **kwargs):
+        self.manager = manager
+        self.__dict__.update(kwargs)
+
+    @property
+    def todo(self):
+        if not self._todo:
+            raise UpdatePlanNotRun
+
+        return self._todo
+
+    @property
+    def result(self):
+        if not self._result:
+            raise UpdateNotRun
+
+        return self._result
+
+    @property
+    def errors(self):
+        if not self._errors:
+            raise UpdateNotRun
+
+        return self._errors
+
+    @abstractproperty
+    def report(self):
+        pass
+
+    @abstractmethod
+    async def _plan(self) -> Any:
+        pass
+
+    async def plan(self) -> str:
+        self._todo, self._errors = await self._plan()
+
+        if self._errors:
+            raise UpdatePlanError(self.preview)
+
+        return self.preview
+
+    @abstractmethod
+    async def _run(self) -> Tuple[Any, Iterable]:
+        """:return: update result and potential errors."""
+
+    async def run(self) -> str:
+        self._result, self._errors = await self._run()
+
+        if self._errors:
+            raise UpdateFailed(self.report)
+
+        return self.report
 
 
 class Prompt(ABC):
@@ -115,8 +173,8 @@ class AsyncPrompt(Prompt):
         Prompt.__init__(self, *args, **kwargs)
         self.quiz = deque()
 
-    def solve_later(self, problem: Callable) -> None:
-        """Store in :attr:`~.quiz` a problem to be solved later on.
+    def ask_later(self, problem: Callable) -> None:
+        """Store in :attr:`~.quiz` a problem to be answered later on.
 
         A problem is just a function which will be executed to ask one or more
         questions, and to perform actions using answers provided by the user::
@@ -131,7 +189,7 @@ class AsyncPrompt(Prompt):
                 user.name = new
                 user.save()
 
-            prompt.solve_later(username_update)
+            prompt.ask_later(username_update)
 
         Problems can be solved one after another by calling :meth:`~.answer_quiz`.
         """

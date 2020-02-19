@@ -1,5 +1,6 @@
 """Base classes to process website's source files."""
 
+import logging
 from abc import ABC, abstractmethod, abstractproperty
 from contextlib import contextmanager
 from pathlib import Path
@@ -15,6 +16,8 @@ from website.base.parsers import BaseDocumentSourceParser
 from website.exceptions import DocumentParsingError, DocumentProcessingError
 from website.models import Category, Tag
 from website.typing import ProcessingErrorSet, ProcessingResult
+
+logger = logging.getLogger(__name__)
 
 
 class CatchProcessorErrors(type):
@@ -38,6 +41,7 @@ class CatchProcessorErrors(type):
                         raise
 
                     self._errors.add(exc)
+                    self.logger.debug(f"Processing error: {exc}")
 
             return wrapper
 
@@ -50,6 +54,7 @@ class CatchProcessorErrors(type):
                         raise
 
                     self._errors.add(exc)
+                    self.logger.debug(f"Path scanning error: {exc}")
 
             return wrapper
 
@@ -86,6 +91,8 @@ class BaseDocumentFileProcessor(metaclass=CatchProcessorErrors):
 
         # To catch potential exceptions when processing the document's source file.
         self._catch_errors = False
+
+        self.logger = CustomAdapter(logger, {'source_file': self.path})
 
     @abstractmethod
     async def process(self) -> Tuple[ProcessingResult, ProcessingErrorSet]:

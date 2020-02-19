@@ -5,6 +5,7 @@ from pathlib import Path
 from sys import exit
 
 from flask_frozen import Freezer
+from git.exc import GitError
 from invoke import Task, task
 
 from website import create_app, db as _db
@@ -110,6 +111,38 @@ def create_db(ctx, path):
 
     with app.app_context():
         _db.create_all()
+
+
+@task(klass=VerboseTask)
+def update(ctx, db, repository, commit='HEAD~1', force=False):
+    """Update website's content from a content repository."""
+    config = DevelopmentConfig(DATABASE_PATH=db)
+    app = create_app(config)
+
+    asciidoctor = AsciidoctorToHTMLConverter()
+    handlers = {
+        'categories.yml': CategoriesFileHandler,
+        'tags.yml': TagsFileHandler,
+        'blog/**/*.adoc': partial(ArticleFileHandler, reader=asciidoctor),
+    }
+
+    async def main(content):
+        repository = Repository(repository)  # Can raise GitError
+        content = ContentManager(repository, handlers)
+
+        with content.load_changes(since=commit) as update:
+            print(await update.plan())  # Can raise UpdatePlanError
+
+            if not force:
+                update.confirm()  # Can raise UpdateAborted
+
+            print(await update.run())  # Can raise UpdateFailed
+
+    with app.app_context(), suppress(UpdateAborted):
+        try:
+            asyncio.run(main(content))
+        except (GitError, UpdateFailed, UpdatePlanError) as exc:
+            sys.exit(exc)
 
 
 # Deployment

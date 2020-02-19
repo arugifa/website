@@ -7,24 +7,24 @@ class WebsiteException(Exception):
 
 # Database Exceptions
 
-class DatabaseException(WebsiteException):
+class DatabaseError(WebsiteException):
     """Errors related to the database."""
 
 
 # TODO: Rename to DatabaseLookupError? (02/2020)
-class ItemNotFound(DatabaseException):
+class ItemNotFound(DatabaseError):
     """If a lookup in database for a specific item doesn't return any result."""
 
 
-class MultipleItemsFound(DatabaseException):
+class MultipleItemsFound(DatabaseError):
     """Raised if several results are returned when looking for a specific item."""
 
 
-class InvalidItem(DatabaseException):
+class InvalidItem(DatabaseError):
     """If trying to save in database an item which presents integrity errors."""
 
 
-class ItemAlreadyExisting(DatabaseException):
+class ItemAlreadyExisting(DatabaseError):
     """If trying to insert in database an item already existing."""
 
 

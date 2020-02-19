@@ -3,347 +3,285 @@
 Mainly base classes to be inherited by website's components.
 """
 
+import asyncio
 import logging
-from abc import ABC, abstractmethod
-from contextlib import AbstractAsyncContextManager
-from dataclasses import dataclass
+from io import StringIO
 from pathlib import Path, PurePath
-from typing import Callable, ClassVar, List, Union
+from typing import Callable, Dict, Iterable, List, Mapping, Tuple, Union
 
 import aiofiles
-import lxml.etree
-import lxml.html
-from lxml.cssselect import CSSSelector
+from flask import render_template
 
 from website import exceptions
-from website.blog.models import Category, Tag
-from website.models import Document
-from website.update import AsyncPrompt
-from website.utils import BaseCommandLine
-
-DocumentPath = Union[Path, PurePath]  # For prod and tests
+from website.base.handlers import BaseDocumentFileHandler
+from website.base.models import BaseDocument
+from website.base.update import BaseUpdateManager, BaseUpdateRunner
+from website.exceptions import DatabaseError, InvalidSourceFile
+from website.utils.git import GitRepository
 
 logger = logging.getLogger(__name__)
 
 
-class DocumentPrompt(AsyncPrompt):
-    """User prompt used during documents update in database."""
+class ContentUpdateRunner(BaseUpdateRunner):
 
     @property
-    def questions(self):
-        """Questions the user has to answer while importing new documents."""
-        return {
-            Category.name: 'Please enter a name for the new "{uri}" category: ',
-            Tag.name: 'Please enter a name for the new "{uri}" tag: ',
-        }
+    def preview(self) -> str:
+        # template = 'updates/content/preview.txt'
+        # return render_template(template, changes=changes)
+        output = StringIO()
+
+        for action, files in self.todo:
+            if files:
+                print(f"The following files have been {action}:", file=output)
+
+                for f in files:
+                    if isinstance(f, tuple):
+                        # - src_file -> dst_file
+                        print("- ", end="", file=output)
+                        print(*f, sep=" -> ", file=output)
+                    else:
+                        print(f"- {f}", file=output)
+
+        return output.getvalue()
+
+    @property
+    def report(self):
+        template = 'updates/content/report.txt'
+        return render_template(template, result=result, errors=errors)
+
+    async def _plan(self) -> Dict:
+        errors = set()
+
+        try:
+            plan = self.manager.repository.diff(self.commit)
+        except GitError as exc:
+            errors.add(exc)
+
+        return plan, errors
+
+    async def _run(self) -> Tuple[Dict, Set]:
+        """
+        :raise website.exceptions.ItemAlreadyExisting:
+            when trying to create documents already existing in database.
+        :raise website.exceptions.ItemNotFound:
+            when trying to modify documents not existing in database.
+        :raise website.exceptions.InvalidDocumentLocation:
+            when a source file is stored in a wrong directory.
+        """
+        result = {}
+        errors = set()
+
+        def do(func):
+            action = func.__name__ + 'ed'  # E.g., added, replaced, renamed, deleted
+            result[action], error_set = await func(self.commit)
+            errors = errors | error_set
+
+        try:
+            do(self.manager.repository.add)
+            do(self.manager.repository.replace)
+            do(self.manager.repository.rename)
+            do(self.manager.repository.delete)
+        except GitError as exc:
+            errors.add(exc)
+
+        return result, errors
 
 
-# Document Processing
+class ContentManager:
+    """Manage website's content life cycle.
 
-class BaseDocumentHandler(ABC):
-    """Manage the life cycle of a document in database.
+    The content is organized as a set of categorized documents. For example::
 
-    :param path:
-        path of the document's source file. Every document must be written in HTML,
-        and respect a naming convention. See documentation of handler subclasses
-        for more info.
+        blog/
+            2019/
+                01-31. first_article_of_the_year.adoc
+                12-31. last_article_of_the_year.adoc
+
+    As part of website's content update, every document is loaded, processed,
+    and finally stored, updated or deleted in the database.
+
+    :param repository:
+        path of the Git repository where website's content is stored.
     :param reader:
-        function to read the documents.
-    :param prompt:
-        function to interactively ask questions during documents import,
-        when certain things cannot be inferred automatically.
+        function to read (and convert on the fly) documents.
     """
 
-    #: Document model clas.
-    model: ClassVar[Document]
-    #: Document parser class.
-    parser: ClassVar['BaseDocumentSourceParser']
-
     def __init__(
-            self, path: DocumentPath, *,
-            reader: Callable = aiofiles.open, prompt: AsyncPrompt = None):
-        self.path = path
-        self.reader = reader
-        self.prompt = prompt or DocumentPrompt()
+            self, repository: GitRepository,
+            handlers: Mapping[str, BaseDocumentFileHandler]):
 
-        self._document = None  # Used for caching purpose
-        self._source = None  # Used for caching purpose
-
-    @property
-    def document(self) -> Document:
-        """Look for the document in database.
-
-        :raise ~.ItemNotFound: if the document cannot be found.
-        """
-        if not self._document:
-            uri = self.scan_uri()
-            self._document = self.model.find(uri=uri)  # Can raise ItemNotFound
-
-        return self._document
-
-    @document.setter
-    def document(self, value: Document):
-        self._document = value
-
-    @property
-    async def source(self) -> 'BaseDocumentSourceParser':
-        """Load document's source on the fly.
-
-        :raise ~.DocumentLoadingError:
-            when something wrong happens while reading the source file.
-        """
-        if not self._source:
-            self._source = await self.load()  # Can raise DocumentLoadingError
-
-        return self._source
+        self.repository = repository
+        self.handlers = handlers
 
     # Main API
 
-    async def insert(self, *, batch: bool = False) -> Document:
-        """Insert document into database.
-
-        :param batch:
-            set to ``True`` to delay some actions requiring user input.
-            Useful when several documents are processed in parallel.
-        :return:
-            the newly created document.
-        :raise ~.ItemAlreadyExisting:
-            if a conflict happens during document insertion.
-        """
-        # Can raise ItemAlreadyExisting.
-        return await self.update(create=True, batch=batch)
-
-    async def update(
-            self, uri: str = None, create: bool = False, *,
-            batch: bool = False) -> Document:
-        """Update document in database.
-
-        :param uri:
-            URI the document currently has in database. If not provided, the URI will
-            be retrieved from the document's :attr:`path`.
-        :param create:
-            create the document if it doesn't exist yet in database.
-        :param batch:
-            set to ``True`` to delay some actions requiring user input.
-            Useful when several documents are processed in parallel.
-
-        :return:
-            the updated (or newly created) document.
-
-        :raise ~.ItemNotFound:
-            if the document cannot be found, and ``create`` is set to ``False``.
-        :raise ~.ItemAlreadyExisting:
-            if ``create`` is set to ``True``, but the document already exists.
-        """  # noqa: E501
-        if create:
-            uri = self.scan_uri()
-            document = self.model(uri=uri)
-
-            if document.exists():
-                raise exceptions.ItemAlreadyExisting(uri)
-
-            self.document = document
-
-        elif uri:  # Renaming
-            self.document = self.model.find(uri=uri)  # Can raise ItemNotFound
-            self.document.uri = self.scan_uri()  # New URI
-
-        await self.process(batch=batch)
-
-        if not batch:
-            # Batch operations can create transient documents.
-            # Saving them now could raise integrity errors from the database.
-            self.document.save()
-
-        if create:
-            message = "Created new %s: %s"
-            # XXX: Why using logger, and not something like self.print(...)? (05/2019)
-            logger.info(message, self.document.doc_type, self.document.uri)
-        elif uri:
-            message = "Renamed and updated existing %s: %s"
-            logger.info(message, self.document.doc_type, self.document.uri)
+    def load_changes(self, *, since: str) -> ContentUpdateRunner:
+        # Get new DB session.
+        try:
+            yield ContentUpdateRunner(self, commit=since)
+        except UpdateFailed:
+            db.session.rollback()
+            raise
         else:
-            message = "Updated existing %s: %s"
-            logger.info(message, self.document.doc_type, self.document.uri)
-
-        return self.document
-
-    async def rename(self, target: Path, *, batch: bool = False) -> Document:
-        """Rename (and update) document in database.
-
-        :param target: the new path of document's source file.
-        :return: the updated and renamed document.
-        :raise ~.ItemNotFound: if the document doesn't exist.
-        """
-        # TODO: Set-up an HTTP redirection (01/2019)
-        uri = self.scan_uri()
-        handler = self.__class__(target, reader=self.reader, prompt=self.prompt)
-        return await handler.update(uri, batch=batch)
-
-    def delete(self) -> None:
-        """Remove a document from database.
-
-        :return: URI of the deleted document.
-        :raise ~.ItemNotFound: if the document doesn't exist.
-        """
-        uri = self.document.uri
-        doc_type = self.document.doc_type
-
-        self.document.delete()  # Can raise ItemNotFound
-        logger.info("Deleted %s: %s", doc_type, uri)
+            db.session.commit()
 
     # Helpers
 
-    async def load(self) -> 'BaseDocumentSourceParser':
-        """Read and prepare for parsing the source file located at :attr:`path`.
+    # TODO: Update docstring (03/2019)
+    async def add(self, *, since: str) -> List[BaseDocument]:
+        """Manually insert specific new documents into database.
 
-        :raise ~.DocumentLoadingError:
-            when something wrong happens while reading the source file
-            (e.g., file not found or unsupported format).
-        """  # noqa: E501
-        try:
-            async with self.reader(self.path) as source_file:
-                source = await source_file.read()
-        except (OSError, UnicodeDecodeError) as exc:
-            raise exceptions.DocumentLoadingError(self, exc)
+        :param new:
+            paths of documents source files.
 
-        return self.parser(source)
+        :raise website.exceptions.ItemAlreadyExisting:
+            if a document already exists in database.
+        :raise website.exceptions.HandlerNotFound:
+            if a document doesn't have any handler defined in :attr:`handlers`.
+        :raise website.exceptions.InvalidDocumentLocation:
+            when a source file is stored in a wrong directory.
 
-    @abstractmethod
-    async def process(self, *, batch: bool = False) -> None:
-        """Parse :attr:`path` and update :attr:`document`'s attributes.
-
-        :param batch:
-            set to ``True`` to delay some actions requiring user input.
-            Useful when several documents are processed in parallel.
+        :return:
+            newly created documents.
         """
+        errors = set()
+        to_add = self.repository.diff(commit)['added']  # Can raise GitError
 
-    # Path Scanners
-    # Always process paths from right to left,
-    # to be able to handle absolute or relative paths.
+        async def add(src):
+            try:
+                await self.get_handler(src).insert()
+            except (DatabaseError, HandlerNotFound, InvalidSourceFile) as exc:
+                errors.add(exc)
+            return src
 
-    def scan_uri(self) -> str:
-        """Return document's URI, based on its :attr:`path`."""
-        return self.path.stem.split('.')[-1]
+        return await asyncio.gather(add(src) for src in to_add), errors
 
+    # TODO: Update docstring (03/2019)
+    async def replace(self, *, since: str) -> List[BaseDocument]:
+        """Manually update specific existing documents in database.
 
-class BaseDocumentSourceParser:
-    """Parse HTML source of a document.
+        :param existing:
+            paths of documents source files.
 
-    :raise ~.DocumentMalformatted: when the given source is not valid HTML.
-    """
+        :raise website.exceptions.ItemNotFound:
+            if a document doesn't exist in database.
+        :raise website.exceptions.HandlerNotFound:
+            if a document doesn't have any handler defined in :attr:`handlers`.
+        :raise website.exceptions.InvalidDocumentLocation:
+            when a source file is stored in a wrong directory.
 
-    def __init__(self, source: str):
-        try:
-            self.source = lxml.html.document_fromstring(source)
-        except lxml.etree.ParserError:
-            raise exceptions.DocumentMalformatted(source)
-
-    def parse_title(self) -> str:
-        """Look for document's title.
-
-        :raise ~.DocumentTitleMissing: when no title is found.
+        :return:
+            updated documents.
         """
-        parser = CSSSelector('html head title')
+        errors = set()
+        to_replace = self.repository.diff(commit)['modified']  # Can raise GitError
+
+        async def replace(src):
+            try:
+                await self.get_handler(src).update()
+            except (DatabaseError, HandlerNotFound, InvalidSourceFile) as exc:
+                errors.add(exc)
+            return src
+
+        return await asyncio.gather(replace(src) for src in to_replace)
+
+    # TODO: Update docstring (03/2019)
+    async def rename(self, *, since: str) -> List[BaseDocument]:
+        """Manually rename and update specific existing documents in database.
+
+        :param existing:
+            previous and new paths of documents source files.
+
+        :raise website.exceptions.ItemNotFound:
+            if a document doesn't exist in database.
+        :raise website.exceptions.HandlerNotFound:
+            if a document doesn't have any handler defined in :attr:`handlers`.
+        :raise website.exceptions.InvalidDocumentLocation:
+            when a source file is stored in a wrong directory.
+
+        :return:
+            updated documents.
+        """
+        errors = set()
+        to_rename = self.repository.diff(commit)['renamed']  # Can raise GitError
+
+        async def rename(src, dst):
+            try:
+                src_handler = self.get_handler(src)
+                dst_handler = self.get_handler(dst)
+            except HandlerNotFound as exc:
+                errors.add(exc)
+                return
+
+            try:
+                assert src_handler.__class__ is dst_handler.__class__
+            except AssertionError:
+                errors.add(exceptions.DocumentCategoryChanged(src, dst))
+                return
+
+            try:
+                await src_handler.rename(dst)
+            except (DatabaseError, InvalidSourceFile) as exc:
+                errors.add(exc)
+            return src, dst
+
+        return await asyncio.gather(rename(src, dst) for src, dst in to_rename)
+
+    def delete(self, *, since: str) -> None:
+        """Manually delete specific documents from database.
+
+        :param removed:
+            paths of deleted documents source files.
+
+        :raise website.exceptions.ItemNotFound:
+            if a document doesn't exist in database.
+        :raise website.exceptions.HandlerNotFound:
+            if a document doesn't have any handler defined in :attr:`handlers`.
+        :raise website.exceptions.InvalidDocumentLocation:
+            when a source file is stored in a wrong directory.
+        """
+        errors = set()
+        to_delete = self.repository.diff(commit)['deleted']  # Can raise GitError
+
+        def delete(src):
+            for src in to_delete:
+                try:
+                    self.get_handler(src).delete()
+                except (DatabaseError, HandlerNotFound, InvalidSourceFile) as exc:
+                    errors.add(exc)
+                return src
+
+        return [delete(src) for src in to_delete], errors
+
+    # Helpers
+
+    def get_handler(self, document: Union[Path, PurePath]) -> BaseDocumentFileHandler:
+        """Return handler to process the source file of a document.
+
+        :param document:
+            path of the document's source file.
+
+        :raise website.exceptions.HandlerNotFound:
+            if no handler in :attr:`handlers` is defined
+            for this type of document.
+        :raise website.exceptions.InvalidDocumentLocation:
+            when the source file is not located in :attr:`directory`
+            or inside a subdirectory.
+        """
+        if document.is_absolute():
+            try:
+                relative_path = document.relative_to(self.repository.path)
+            except ValueError:
+                raise exceptions.InvalidDocumentLocation(document)
+        else:
+            relative_path = document
 
         try:
-            title = parser(self.source)[0].text_content()
-            assert title
-        except (AssertionError, IndexError):
-            raise exceptions.DocumentTitleMissing(self)
+            category = list(relative_path.parents)[::-1][1].name
+            handler = self.handlers[category]
+        except IndexError:
+            raise exceptions.DocumentNotCategorized(document)
+        except KeyError:
+            raise exceptions.HandlerNotFound(document)
 
-        return title
-
-    def parse_tags(self) -> List[str]:
-        """Look for document's tags."""
-        parser = CSSSelector('html head meta[name=keywords]')
-
-        try:
-            tags = parser(self.source)[0].get('content', '')
-            tags = [tag.strip() for tag in tags.split(',')]
-            assert all(tags)
-        except (AssertionError, IndexError):
-            return []
-
-        return tags
-
-
-# Document Reading
-
-class BaseDocumentReader(ABC, BaseCommandLine):
-    """Base class for external document readers.
-
-    Provides a subset of :func:`aiofiles.open`'s API.
-
-    Every reader relies on a :attr:`~program` installed locally, to open, read and if
-    necessary convert documents on the fly to HTML format. The result of the conversion
-    should be displayed on the standard output.
-
-    :param shell:
-        alternative shell to run the reader's :attr:`~program`. Must have a similar API
-        to :func:`asyncio.create_subprocess_shell`.
-    """
-
-    #: Name of the reader's binary to execute for reading documents.
-    program: ClassVar[str] = None
-    #: Default arguments to use when running the reader's program.
-    arguments: ClassVar[str] = None
-
-    def __init__(self, shell: Callable = None):
-        BaseCommandLine.__init__(self, shell)
-
-        #: Path of the document to read. Set by :meth:`__call__`.
-        self.path = None
-
-    def __call__(self, path: Union[str, Path]) -> 'DocumentOpener':
-        """Open the document for further reading.
-
-        Can be called directly or used as a context manager.
-
-        :raise FileNotFoundError: when the document cannot be opened.
-        """
-        path = Path(path)
-
-        if not path.is_file():
-            raise FileNotFoundError(f"Document doesn't exist: {path}")
-
-        self.path = Path(path)
-        return DocumentOpener(self)
-
-    async def read(self) -> str:
-        """Read and convert to HTML the document located at :attr:`path`.
-
-        :raise OSError:
-            if the reader's :attr:`~program` cannot convert the document.
-        :raise UnicodeDecodeError:
-            when the conversion's result is invalid.
-        """
-        assert self.path is not None, "Open a file before trying to read it"
-
-        cmdline = self.arguments.format(path=self.path)
-        # Can raise OSError or UnicodeDecodeError.
-        html = await self.run(cmdline)
-
-        return html.strip()
-
-
-@dataclass
-class DocumentOpener(AbstractAsyncContextManager):
-    """Helper for :class:`BaseDocumentReader` to open documents.
-
-    :param reader: reader instance opening the document.
-    """
-
-    reader: BaseDocumentReader
-
-    def __getattr__(self, name: str):
-        """Let :attr:`reader` opening a document as a function call."""
-        return getattr(self.reader, name)
-
-    async def __aenter__(self) -> BaseDocumentReader:
-        """Let :attr:`reader` opening a document inside a context manager."""
-        return self.reader
-
-    async def __aexit__(self, *exc) -> None:
-        """Nothing done here for the moment..."""
-        return
+        return handler(document, self.reader)
