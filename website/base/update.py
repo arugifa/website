@@ -1,69 +1,108 @@
-"""Collection of classes to manage website updates."""
-# TODO: Write tests before merging DEV into MASTER (05/2019)
+"""Base classes to manage updates."""
 
 import re
 import sys
 from abc import ABC, abstractmethod
 from collections import deque
-from contextlib import AbstractAsyncContextManager
-from typing import Any, Callable, ClassVar, Dict, TextIO, Union
+from contextlib import AbstractAsyncContextManager, contextmanager
+from typing import Any, Callable, ClassVar, Dict, Iterable, TextIO, Union
+
+from tqdm import tqdm
 
 from website import exceptions
 
 
 class BaseUpdateRunner:
-    def __init__(self, manager, **kwargs):
+
+    def __init__(
+            self, manager: Any, *,
+            prompt: 'Prompt' = None, output: TextIO = sys.stdout):
+
         self.manager = manager
-        self.__dict__.update(kwargs)
+        self.prompt = prompt or Prompt(output=output)
+        self.output = output
+
+    # Abstract Attributes
+
+    @abstractproperty
+    def preview(self) -> str:
+        pass
+
+    @abstractproperty
+    def report(self) -> str:
+        pass
+
+    @abstractmethod
+    async def _plan(self) -> Tuple[UpdatePlan, UpdateErrors]:
+        pass
+
+    @abstractmethod
+    async def _run(self) -> Tuple[UpdateResult, UpdateErrors]:
+        """:return: update result and potential errors."""
+
+    # Properties
 
     @property
-    def todo(self):
-        if not self._todo:
-            raise UpdatePlanNotRun
+    def errors(self) -> UpdateErrors:
+        if not self._errors:
+            raise UpdateNotRun
 
-        return self._todo
+        return self._errors
 
     @property
-    def result(self):
+    def progress(self) -> UpdateProgress:
+        return self._progress
+
+    @property
+    def result(self) -> UpdateResult:
         if not self._result:
             raise UpdateNotRun
 
         return self._result
 
     @property
-    def errors(self):
-        if not self._errors:
-            raise UpdateNotRun
+    def todo(self) -> UpdatePlan:
+        if not self._todo:
+            raise UpdatePlanNotRun
 
-        return self._errors
+        return self._todo
 
-    @abstractproperty
-    def report(self):
-        pass
+    # Main API
 
-    @abstractmethod
-    async def _plan(self) -> Any:
-        pass
-
-    async def plan(self) -> str:
+    async def plan(self) -> UpdatePlan:
         self._todo, self._errors = await self._plan()
 
         if self._errors:
             raise UpdatePlanError(self.preview)
 
-        return self.preview
+        print(self.preview, file=self.output)
+        return self._todo
 
-    @abstractmethod
-    async def _run(self) -> Tuple[Any, Iterable]:
-        """:return: update result and potential errors."""
+    def confirm(self) -> None:
+        try:
+            self.prompt.confirm()
+        except AssertionError:
+            raise UpdateAborted()
 
-    async def run(self) -> str:
+    async def run(self) -> UpdateResult:
         self._result, self._errors = await self._run()
 
         if self._errors:
             raise UpdateFailed(self.report)
 
-        return self.report
+        print(self.report, file=self.output)
+        return self._result
+
+    # Helpers
+
+    @contextmanager
+    def progress_bar(self, *, total: int) -> None:
+        try:
+            with tqdm(total=total, file=self.output) as pbar:
+                self._progress = pbar
+                yield
+        finally:
+            self._progress = None
 
 
 class Prompt(ABC):
@@ -82,46 +121,6 @@ class Prompt(ABC):
         self.input = input
         self.output = output
 
-    @property
-    @abstractmethod
-    def questions(self) -> Dict[Union[str, object], str]:
-        """Predefined questions to ask during an update.
-
-        To be used in conjunction with :meth:`~.ask_for`.
-
-        Questions should be classified by topic, e.g.::
-
-            {
-                'first_name': "What's your first name?",
-                'last_name': "What's your last name?",
-            }
-
-        Templates can also be used (see :meth:`~.ask_for` for more info)::
-
-            {
-                'first_name': "What's the first name of {user}?",
-                'last_name': "What's the last name of {user}?",
-            }
-
-        Finally, objects can also be used to classify questions::
-
-            {
-                UserName: "What's the user's name?",
-                ProjectName: "What's the project's name?",
-            }
-        """
-
-    def ask_for(self, topic: Union[str, object], **details: str) -> str:
-        """Ask for a predefined question about a specific topic.
-
-        Questions are stored in :meth:`~.questions`, and can be personalized by giving
-        additional keyword arguments.
-
-        :return: the user's answer.
-        """
-        question = self.questions[topic].format(**details)
-        return self.ask(question)
-
     def ask(self, question: str, default_answer: str = None) -> str:
         """Ask a question to the user.
 
@@ -134,19 +133,12 @@ class Prompt(ABC):
         :return:
             the user's answer (or the default one, if defined).
         """
-        answer = None
+        while not (answer := self.input(question) or default_answer):
+            continue
+        else:
+            return answer
 
-        def ask_again(question):
-            return self.input(question) or default_answer
-
-        # TODO: Use an assignment expression instead with Python 3.8 (03/2019)
-        # See https://www.python.org/dev/peps/pep-0572/
-        while not answer:
-            answer = ask_again(question)
-
-        return answer
-
-    def confirm(self, todo: str) -> None:
+    def confirm(self) -> None:
         """Ask for confirmation to the user before performing an action.
 
         Useful for example to ask for pursuing the update, after having displayed a
@@ -154,49 +146,6 @@ class Prompt(ABC):
 
         :raise AssertionError: if the user prefers to cancel.
         """
-        print(todo, file=self.output)
-
         yes = r'^\s*y(es)?\s*$'
         answer = self.ask("Do you want to continue? [Y/n] ", default='y')
         assert re.match(yes, answer, flags=re.I)
-
-
-class AsyncPrompt(Prompt):
-    """Helper to asynchronously ask questions to an user during an update.
-
-    Useful when performing the update's steps in parralel, and that some questions
-    should be asked when all steps have been completed, in order to not block their
-    execution.
-    """
-
-    def __init__(self, *args, **kwargs):
-        Prompt.__init__(self, *args, **kwargs)
-        self.quiz = deque()
-
-    def ask_later(self, problem: Callable) -> None:
-        """Store in :attr:`~.quiz` a problem to be answered later on.
-
-        A problem is just a function which will be executed to ask one or more
-        questions, and to perform actions using answers provided by the user::
-
-            prompt = AsyncPrompt()
-
-            def username_update(db):
-                current = prompt.ask_question("What's the user you want to update?")
-                user = db.find_user(name=current)
-
-                new = prompt.ask_question("What's the new user's name?")
-                user.name = new
-                user.save()
-
-            prompt.ask_later(username_update)
-
-        Problems can be solved one after another by calling :meth:`~.answer_quiz`.
-        """
-        self.quiz.append(problem)
-
-    def answer_quiz(self) -> None:
-        """Ask the user to solve all problems stored in :attr:`~.quiz`."""
-        while self.quiz:
-            problem = self.quiz.popleft()
-            problem()

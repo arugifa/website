@@ -131,12 +131,12 @@ def update(ctx, db, repository, commit='HEAD~1', force=False):
         content = ContentManager(repository, handlers)
 
         with content.load_changes(since=commit) as update:
-            print(await update.plan())  # Can raise UpdatePlanError
+            await update.plan()  # Can raise UpdatePlanError
 
             if not force:
                 update.confirm()  # Can raise UpdateAborted
 
-            print(await update.run())  # Can raise UpdateFailed
+            await update.run()  # Can raise UpdateFailed
 
     with app.app_context(), suppress(UpdateAborted):
         try:

@@ -1,7 +1,6 @@
 """Base classes to manage content life cycle in database."""
 
 import logging
-from abc import ABC
 from pathlib import Path, PurePath
 from typing import Callable, ClassVar, Union
 
@@ -16,7 +15,11 @@ DocumentPath = Union[Path, PurePath]  # For prod and tests
 logger = logging.getLogger(__name__)
 
 
-class BaseDocumentFileHandler(ABC):
+class BaseFileHandler:
+    pass
+
+
+class BaseDocumentFileHandler:
     """Manage the life cycle of a document in database.
 
     :param path:
@@ -93,13 +96,13 @@ class BaseDocumentFileHandler(ABC):
         return document
 
     async def rename(self, target: Path) -> BaseDocument:
-        """Rename (and update) document in database.
+        """Rename document in database.
 
         :param target:
             new path of document's source file.
 
         :return:
-            the updated and renamed document.
+            the renamed document.
 
         :raise website.exceptions.ItemNotFound:
             if the document doesn't exist in database.
@@ -115,7 +118,7 @@ class BaseDocumentFileHandler(ABC):
         document.update(uri=new_uri)
         self.logger.info(f"Renamed document in database to {document.uri}")
 
-        return await new_handler.update()  # Can raise InvalidFile
+        return document
 
     def delete(self) -> None:
         """Remove a document from database.

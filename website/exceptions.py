@@ -72,13 +72,13 @@ class InvalidFile(WebsiteException):
 
 # Update Exceptions
 
-class UpdateAborted(WebsiteException):
+class UpdateError(WebsiteException):
+    pass
+
+
+class UpdateAborted(UpdateError):
     """When the user cancels an update."""
 
 
-class ContentUpdateException(WebsiteException):
-    """Couldn't update website's content for some reason."""
-
-
-class NoUpdate(WebsiteException):
-    """If not update needs to be run."""
+class UpdateFailed(UpdateError):
+    pass

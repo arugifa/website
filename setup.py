@@ -23,7 +23,8 @@ setup(
         'gitpython>=3.0',
         'lxml[cssselect]>=4.3',
         'openstacksdk>=0.38',
-        'sortedcontainers>=2.1.0',
+        'sortedcontainers>=2.1',
         'sqlalchemy>=1.3',
+        'tqdm>=4.43',
     ],
 )

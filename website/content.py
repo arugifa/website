@@ -3,26 +3,188 @@
 Mainly base classes to be inherited by website's components.
 """
 
-import asyncio
-import logging
+import itertools
+import sys
+from contextlib import contextmanager
 from io import StringIO
-from pathlib import Path, PurePath
-from typing import Callable, Dict, Iterable, List, Mapping, Tuple, Union
+from typing import TextIO, Tuple
 
-import aiofiles
 from flask import render_template
 
-from website import exceptions
-from website.base.handlers import BaseDocumentFileHandler
-from website.base.models import BaseDocument
-from website.base.update import BaseUpdateManager, BaseUpdateRunner
-from website.exceptions import DatabaseError, InvalidSourceFile
+from website import db, exceptions
+from website.base.handlers import BaseFileHandler
+from website.base.update import BaseUpdateRunner, Prompt
+from website.exceptions import (
+    DatabaseError, DocumentCategoryChanged, HandlerNotFound, InvalidSourceFile)
+from website.typing import (
+    Content, ContentDeletionResult, ContentHandlers, ContentOperationErrors,
+    ContentOperationResult, ContentUpdateErrors, ContentUpdatePlan,
+    ContentUpdatePlanErrors, ContentUpdateResult, SourceFilePath)
 from website.utils.git import GitRepository
 
-logger = logging.getLogger(__name__)
+
+class ContentManager:
+    """Manage website's content life cycle.
+
+    The content is organized as a set of categorized documents. For example::
+
+        blog/
+            2019/
+                01-31. first_article_of_the_year.adoc
+                12-31. last_article_of_the_year.adoc
+
+    As part of website's content update, every document is loaded, processed,
+    and finally stored, updated or deleted in the database.
+
+    :param repository:
+        path of the Git repository where website's content is stored.
+    :param reader:
+        function to read (and convert on the fly) documents.
+    """
+
+    def __init__(self, repository: GitRepository, handlers: ContentHandlers):
+        self.repository = repository
+        self.handlers = handlers
+
+    # Main API
+
+    @contextmanager
+    def load_changes(
+            self, *, since: str, output: TextIO = sys.stdout) -> 'ContentUpdateRunner':
+        # Get new DB session.
+        try:
+            yield ContentUpdateRunner(self, since, output=output)
+        except exceptions.UpdateFailed:
+            db.session.rollback()
+            raise
+        else:
+            db.session.commit()
+
+    async def add(self, src: str) -> Content:
+        """Manually insert specific new documents into database.
+
+        :param new:
+            paths of documents source files.
+
+        :raise website.exceptions.ItemAlreadyExisting:
+            if a document already exists in database.
+        :raise website.exceptions.HandlerNotFound:
+            if a document doesn't have any handler defined in :attr:`handlers`.
+        :raise website.exceptions.InvalidDocumentLocation:
+            when a source file is stored in a wrong directory.
+
+        :return:
+            newly created documents.
+        """
+        # Can raise DatabaseError, HandlerNotFound, InvalidSourceFile.
+        return await self.get_handler(src).insert()
+
+    async def replace(self, src: str) -> Content:
+        """Manually update specific existing documents in database.
+
+        :param existing:
+            paths of documents source files.
+
+        :raise website.exceptions.ItemNotFound:
+            if a document doesn't exist in database.
+        :raise website.exceptions.HandlerNotFound:
+            if a document doesn't have any handler defined in :attr:`handlers`.
+        :raise website.exceptions.InvalidDocumentLocation:
+            when a source file is stored in a wrong directory.
+
+        :return:
+            updated documents.
+        """
+        # Can raise DatabaseError, HandlerNotFound, InvalidSourceFile.
+        return await self.get_handler(src).update()
+
+    async def rename(self, src: str, dst: str) -> Content:
+        """Manually rename and update specific existing documents in database.
+
+        :param existing:
+            previous and new paths of documents source files.
+
+        :raise website.exceptions.ItemNotFound:
+            if a document doesn't exist in database.
+        :raise website.exceptions.HandlerNotFound:
+            if a document doesn't have any handler defined in :attr:`handlers`.
+        :raise website.exceptions.InvalidDocumentLocation:
+            when a source file is stored in a wrong directory.
+
+        :return:
+            updated documents.
+        """
+        # Can raise HandlerNotFound.
+        src_handler = self.get_handler(src)
+        dst_handler = self.get_handler(dst)
+
+        try:
+            assert src_handler.__class__ is dst_handler.__class__
+        except AssertionError:
+            raise exceptions.DocumentCategoryChanged(src, dst)
+
+        # Can raise DatabaseError, InvalidSourceFile.
+        await src_handler.rename(dst)
+        return await dst_handler.update()
+
+    def delete(self, src: str) -> None:
+        """Manually delete specific documents from database.
+
+        :param removed:
+            paths of deleted documents source files.
+
+        :raise website.exceptions.ItemNotFound:
+            if a document doesn't exist in database.
+        :raise website.exceptions.HandlerNotFound:
+            if a document doesn't have any handler defined in :attr:`handlers`.
+        :raise website.exceptions.InvalidDocumentLocation:
+            when a source file is stored in a wrong directory.
+        """
+        # Can raise DatabaseError, HandlerNotFound, InvalidSourceFile.
+        return self.get_handler(src).delete()
+
+    # Helpers
+
+    def get_handler(self, source_file: SourceFilePath) -> BaseFileHandler:
+        """Return handler to process the source file of a document.
+
+        :param document:
+            path of the document's source file.
+
+        :raise website.exceptions.HandlerNotFound:
+            if no handler in :attr:`handlers` is defined
+            for this type of document.
+        :raise website.exceptions.InvalidDocumentLocation:
+            when the source file is not located in :attr:`directory`
+            or inside a subdirectory.
+        """
+        if source_file.is_absolute():
+            try:
+                relative_path = source_file.relative_to(self.repository.path)
+            except ValueError:
+                raise exceptions.InvalidDocumentLocation(source_file)
+        else:
+            relative_path = source_file
+
+        try:
+            category = list(relative_path.parents)[::-1][1].name
+            handler = self.handlers[category]
+        except IndexError:
+            raise exceptions.DocumentNotCategorized(source_file)
+        except KeyError:
+            raise HandlerNotFound(source_file)
+
+        return handler(source_file, self.reader)
 
 
 class ContentUpdateRunner(BaseUpdateRunner):
+
+    def __init__(
+            self, manager: ContentManager, commit: str, *,
+            prompt: Prompt = None, output: TextIO = sys.stdout):
+
+        self.commit = commit
+        BaseUpdateRunner.__init__(self, manager, prompt=prompt, output=output)
 
     @property
     def preview(self) -> str:
@@ -45,21 +207,17 @@ class ContentUpdateRunner(BaseUpdateRunner):
         return output.getvalue()
 
     @property
-    def report(self):
+    def report(self) -> str:
         template = 'updates/content/report.txt'
-        return render_template(template, result=result, errors=errors)
+        return render_template(template, result=self.result, errors=self.errors)
 
-    async def _plan(self) -> Dict:
-        errors = set()
-
+    async def _plan(self) -> Tuple[ContentUpdatePlan, ContentUpdatePlanErrors]:
         try:
-            plan = self.manager.repository.diff(self.commit)
-        except GitError as exc:
-            errors.add(exc)
+            return self.manager.repository.diff(self.commit), []
+        except exceptions.GitError as exc:
+            return None, [exc]
 
-        return plan, errors
-
-    async def _run(self) -> Tuple[Dict, Set]:
+    async def _run(self) -> Tuple[ContentUpdateResult, ContentUpdateErrors]:
         """
         :raise website.exceptions.ItemAlreadyExisting:
             when trying to create documents already existing in database.
@@ -69,219 +227,77 @@ class ContentUpdateRunner(BaseUpdateRunner):
             when a source file is stored in a wrong directory.
         """
         result = {}
-        errors = set()
+        errors = {}
 
-        def do(func):
-            action = func.__name__ + 'ed'  # E.g., added, replaced, renamed, deleted
-            result[action], error_set = await func(self.commit)
-            errors = errors | error_set
+        document_count = len(itertools.chain(self.todo.values()))
 
-        try:
-            do(self.manager.repository.add)
-            do(self.manager.repository.replace)
-            do(self.manager.repository.rename)
-            do(self.manager.repository.delete)
-        except GitError as exc:
-            errors.add(exc)
+        with self.progress_bar(total=document_count):
+            result['added'], errors['added'] = await self.add_content()
+            result['replaced'], errors['replaced'] = await self.replace_content()
+            result['renamed'], errors['renamed'] = await self.rename_content()
+            result['deleted'], errors['deleted'] = await self.delete_content()
 
         return result, errors
 
+    async def add_content(self) -> Tuple[ContentOperationResult, ContentOperationErrors]:  # noqa: E501
+        result = {}
+        errors = {}
 
-class ContentManager:
-    """Manage website's content life cycle.
+        for src in self.todo['added']:
+            self.progress.set_description(f"Adding {src}")
 
-    The content is organized as a set of categorized documents. For example::
-
-        blog/
-            2019/
-                01-31. first_article_of_the_year.adoc
-                12-31. last_article_of_the_year.adoc
-
-    As part of website's content update, every document is loaded, processed,
-    and finally stored, updated or deleted in the database.
-
-    :param repository:
-        path of the Git repository where website's content is stored.
-    :param reader:
-        function to read (and convert on the fly) documents.
-    """
-
-    def __init__(
-            self, repository: GitRepository,
-            handlers: Mapping[str, BaseDocumentFileHandler]):
-
-        self.repository = repository
-        self.handlers = handlers
-
-    # Main API
-
-    def load_changes(self, *, since: str) -> ContentUpdateRunner:
-        # Get new DB session.
-        try:
-            yield ContentUpdateRunner(self, commit=since)
-        except UpdateFailed:
-            db.session.rollback()
-            raise
-        else:
-            db.session.commit()
-
-    # Helpers
-
-    # TODO: Update docstring (03/2019)
-    async def add(self, *, since: str) -> List[BaseDocument]:
-        """Manually insert specific new documents into database.
-
-        :param new:
-            paths of documents source files.
-
-        :raise website.exceptions.ItemAlreadyExisting:
-            if a document already exists in database.
-        :raise website.exceptions.HandlerNotFound:
-            if a document doesn't have any handler defined in :attr:`handlers`.
-        :raise website.exceptions.InvalidDocumentLocation:
-            when a source file is stored in a wrong directory.
-
-        :return:
-            newly created documents.
-        """
-        errors = set()
-        to_add = self.repository.diff(commit)['added']  # Can raise GitError
-
-        async def add(src):
             try:
-                await self.get_handler(src).insert()
+                result[src] = await self.manager.add(src)
             except (DatabaseError, HandlerNotFound, InvalidSourceFile) as exc:
-                errors.add(exc)
-            return src
+                errors[src] = exc
 
-        return await asyncio.gather(add(src) for src in to_add), errors
+            self.progress.update(1)
 
-    # TODO: Update docstring (03/2019)
-    async def replace(self, *, since: str) -> List[BaseDocument]:
-        """Manually update specific existing documents in database.
+        return result, errors
 
-        :param existing:
-            paths of documents source files.
+    async def replace_content(self) -> Tuple[ContentOperationResult, ContentOperationErrors]:  # noqa: E501
+        result = {}
+        errors = {}
 
-        :raise website.exceptions.ItemNotFound:
-            if a document doesn't exist in database.
-        :raise website.exceptions.HandlerNotFound:
-            if a document doesn't have any handler defined in :attr:`handlers`.
-        :raise website.exceptions.InvalidDocumentLocation:
-            when a source file is stored in a wrong directory.
+        for src in self.todo['replaced']:
+            self.progress.set_description(f"Replacing {src}")
 
-        :return:
-            updated documents.
-        """
-        errors = set()
-        to_replace = self.repository.diff(commit)['modified']  # Can raise GitError
-
-        async def replace(src):
             try:
-                await self.get_handler(src).update()
+                result[src] = await self.manager.replace(src)
             except (DatabaseError, HandlerNotFound, InvalidSourceFile) as exc:
-                errors.add(exc)
-            return src
+                errors[src] = exc
 
-        return await asyncio.gather(replace(src) for src in to_replace)
+            self.progress.update(1)
 
-    # TODO: Update docstring (03/2019)
-    async def rename(self, *, since: str) -> List[BaseDocument]:
-        """Manually rename and update specific existing documents in database.
+        return result, errors
 
-        :param existing:
-            previous and new paths of documents source files.
+    async def rename_content(self) -> Tuple[ContentOperationResult, ContentOperationErrors]:  # noqa: E501
+        result = {}
+        errors = {}
 
-        :raise website.exceptions.ItemNotFound:
-            if a document doesn't exist in database.
-        :raise website.exceptions.HandlerNotFound:
-            if a document doesn't have any handler defined in :attr:`handlers`.
-        :raise website.exceptions.InvalidDocumentLocation:
-            when a source file is stored in a wrong directory.
-
-        :return:
-            updated documents.
-        """
-        errors = set()
-        to_rename = self.repository.diff(commit)['renamed']  # Can raise GitError
-
-        async def rename(src, dst):
-            try:
-                src_handler = self.get_handler(src)
-                dst_handler = self.get_handler(dst)
-            except HandlerNotFound as exc:
-                errors.add(exc)
-                return
+        for src, dst in self.todo['renamed']:
+            self.progress.set_description(f"Renaming {src}")
 
             try:
-                assert src_handler.__class__ is dst_handler.__class__
-            except AssertionError:
-                errors.add(exceptions.DocumentCategoryChanged(src, dst))
-                return
+                result[src] = await self.manager.rename(src, dst)
+            except (DatabaseError, DocumentCategoryChanged, HandlerNotFound, InvalidSourceFile) as exc:  # noqa: E501
+                errors[src] = exc
+
+            self.progress.update(1)
+
+        return result, errors
+
+    async def delete_content(self) -> Tuple[ContentDeletionResult, ContentOperationErrors]:  # noqa: E501
+        result = []
+        errors = {}
+
+        for src in self.todo['deleted']:
+            self.progress.set_description(f"Deleting {src}")
 
             try:
-                await src_handler.rename(dst)
-            except (DatabaseError, InvalidSourceFile) as exc:
-                errors.add(exc)
-            return src, dst
+                self.manager.delete(src)
+                result.append(src)
+            except (DatabaseError, HandlerNotFound, InvalidSourceFile) as exc:
+                errors[src] = exc
 
-        return await asyncio.gather(rename(src, dst) for src, dst in to_rename)
-
-    def delete(self, *, since: str) -> None:
-        """Manually delete specific documents from database.
-
-        :param removed:
-            paths of deleted documents source files.
-
-        :raise website.exceptions.ItemNotFound:
-            if a document doesn't exist in database.
-        :raise website.exceptions.HandlerNotFound:
-            if a document doesn't have any handler defined in :attr:`handlers`.
-        :raise website.exceptions.InvalidDocumentLocation:
-            when a source file is stored in a wrong directory.
-        """
-        errors = set()
-        to_delete = self.repository.diff(commit)['deleted']  # Can raise GitError
-
-        def delete(src):
-            for src in to_delete:
-                try:
-                    self.get_handler(src).delete()
-                except (DatabaseError, HandlerNotFound, InvalidSourceFile) as exc:
-                    errors.add(exc)
-                return src
-
-        return [delete(src) for src in to_delete], errors
-
-    # Helpers
-
-    def get_handler(self, document: Union[Path, PurePath]) -> BaseDocumentFileHandler:
-        """Return handler to process the source file of a document.
-
-        :param document:
-            path of the document's source file.
-
-        :raise website.exceptions.HandlerNotFound:
-            if no handler in :attr:`handlers` is defined
-            for this type of document.
-        :raise website.exceptions.InvalidDocumentLocation:
-            when the source file is not located in :attr:`directory`
-            or inside a subdirectory.
-        """
-        if document.is_absolute():
-            try:
-                relative_path = document.relative_to(self.repository.path)
-            except ValueError:
-                raise exceptions.InvalidDocumentLocation(document)
-        else:
-            relative_path = document
-
-        try:
-            category = list(relative_path.parents)[::-1][1].name
-            handler = self.handlers[category]
-        except IndexError:
-            raise exceptions.DocumentNotCategorized(document)
-        except KeyError:
-            raise exceptions.HandlerNotFound(document)
-
-        return handler(document, self.reader)
+        return result, errors
