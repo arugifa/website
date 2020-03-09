@@ -3,11 +3,10 @@ from pathlib import PurePath
 
 import pytest
 
-from website.blog import exceptions
-from website.blog.processors import ArticleFileProcessor
-from website.factories import CategoryFactory, TagFactory
-
-from tests.base._test_processors import BaseDocumentFileProcessorTest  # noqa: I100
+from arugifa.website.blog import exceptions
+from arugifa.website.blog.processors import ArticleFileProcessor
+from arugifa.website.factories import CategoryFactory, TagFactory
+from arugifa.website.testing.processors import BaseDocumentFileProcessorTest
 
 
 class TestArticleFileProcessor(BaseDocumentFileProcessorTest):
@@ -15,7 +14,7 @@ class TestArticleFileProcessor(BaseDocumentFileProcessorTest):
 
     @pytest.fixture
     def source_file(self, fixtures):
-        return fixtures['blog/article.html']
+        return fixtures['article.html']
 
     # Process file.
 

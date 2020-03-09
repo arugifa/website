@@ -1,4 +1,4 @@
-from setuptools import find_packages, setup
+from setuptools import find_namespace_packages, setup
 
 setup(
     name='arugifa-website',
@@ -11,16 +11,16 @@ setup(
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
     ],
-    packages=find_packages(),
+    packages=find_namespace_packages(include=['arugifa.*']),
     install_requires=[
         'aiofiles>=0.4',
+        'arugifa-cms>=0.1.0',
         'factory_boy>=2.9',
         'flask>=0.12',
         'flask-sqlalchemy>=2.3',
         'frozen-flask>=0.15',
-        'gitpython>=3.0',
         'lxml[cssselect]>=4.3',
         'openstacksdk>=0.38',
         'sortedcontainers>=2.1',

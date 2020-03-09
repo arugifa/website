@@ -3,7 +3,7 @@ from typing import ClassVar
 
 import pytest
 
-from website import config
+from arugifa.website import config
 
 
 class BaseTestConfig:

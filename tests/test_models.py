@@ -1,18 +1,17 @@
 import pytest
 
-from website import factories, models
+from arugifa.website import factories, models
+from arugifa.website.testing.models import BaseModelTest
 
-from tests.base._test_models import BaseTestModel  # noqa: I100
 
-
-class TestCategoryModel(BaseTestModel):
+class TestCategoryModel(BaseModelTest):
     factory = factories.CategoryFactory
     model = models.Category
     doc_type = 'category'
     table = 'categories'
 
 
-class TestTagModel(BaseTestModel):
+class TestTagModel(BaseModelTest):
     factory = factories.TagFactory
     model = models.Tag
     doc_type = 'tag'

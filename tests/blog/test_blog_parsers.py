@@ -1,9 +1,8 @@
 import pytest
 
-from website.blog import exceptions
-from website.blog.parsers import ArticleSourceParser
-
-from tests.base._test_parsers import BaseDocumentSourceParserTest  # noqa: I100
+from arugifa.website.blog import exceptions
+from arugifa.website.blog.parsers import ArticleSourceParser
+from arugifa.website.testing.parsers import BaseDocumentSourceParserTest
 
 
 class TestArticleSourceParser(BaseDocumentSourceParserTest):
@@ -11,7 +10,7 @@ class TestArticleSourceParser(BaseDocumentSourceParserTest):
 
     @pytest.fixture(scope='class')
     def source(self, fixtures):
-        source_file = fixtures['blog/article.html'].open().read()
+        source_file = fixtures['article.html'].open().read()
         return self.parser(source_file)
 
     # Parse lead.

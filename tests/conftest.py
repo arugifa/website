@@ -7,17 +7,16 @@ import openstack.exceptions
 import pytest
 pytest.register_assert_rewrite('website.test.integration')  # Rewrite helper assertions
 import webtest
+from arugifa.toolbox.test.pytest import FixtureMarker
 
-from website import create_app, db as _db
-from website.config import TestingConfig
-from website.deployment.factories import BaseCloudFactory
-from website.deployment.test import FakeNetwork, CloudStubConnectionFactory
-from website.deployment.update import CloudFilesManager
-from website.test.cmdline import CommandLine, TestingShell
-from website.test.fixtures import FileFixtureCollection
-from website.test.pytest import FixtureMarker
-from website.utils.asciidoctor import AsciidoctorToHTMLConverter
-from website.utils.git import GitRepository
+from arugifa.website import create_app, db as _db
+from arugifa.website.config import TestingConfig
+from arugifa.website.deployment.factories import BaseCloudFactory
+from arugifa.website.deployment.test import FakeNetwork, CloudStubConnectionFactory
+from arugifa.website.deployment.update import CloudFilesManager
+from arugifa.website.readers import AsciidoctorToHTMLConverter
+from arugifa.website.test.cmdline import CommandLine, TestingShell
+from arugifa.website.test.fixtures import FileFixtureCollection
 
 here = Path(__file__).parent.resolve()
 integration_test = FixtureMarker()
@@ -101,7 +100,7 @@ def db(app):
     """Clean database between test executions."""
     # Create and drop all tables for every test,
     # as transaction support with SQLAlchemy + SQLite is clumsy.
-    # Didn't find a way yet to make it work.
+    # Didn't find yet a way to make it work.
 
     with app.app_context():
         _db.create_all()
@@ -157,13 +156,6 @@ def object_store(cloud):
 def asciidoctor():
     """Return an Asciidoctor wrapper."""
     return AsciidoctorToHTMLConverter()
-
-
-@pytest.fixture(scope='session')
-@integration_test
-def git():
-    """Return a Git wrapper."""
-    return GitRepository
 
 
 @pytest.fixture(scope='session')

@@ -1,11 +1,10 @@
 from datetime import date, timedelta
 
-from website.blog import factories, models
+from arugifa.website.blog import factories, models
+from arugifa.website.testing.models import BaseDocumentModelTest
 
-from tests.base._test_models import BaseTestDocumentModel  # noqa: I100
 
-
-class TestArticleModel(BaseTestDocumentModel):
+class TestArticleModel(BaseDocumentModelTest):
     factory = factories.ArticleFactory
     model = models.Article
     doc_type = 'article'

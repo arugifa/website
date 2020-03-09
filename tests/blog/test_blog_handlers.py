@@ -3,12 +3,11 @@ from pathlib import PurePath
 
 import pytest
 
-from website.blog.factories import ArticleFactory
-from website.blog.handlers import ArticleFileHandler
-from website.blog.models import Article
-from website.factories import CategoryFactory, TagFactory
-
-from tests.base._test_handlers import BaseDocumentFileHandlerTest  # noqa: I100
+from arugifa.website.blog.factories import ArticleFactory
+from arugifa.website.blog.handlers import ArticleFileHandler
+from arugifa.website.blog.models import Article
+from arugifa.website.factories import CategoryFactory, TagFactory
+from arugifa.website.testing.handlers import BaseDocumentFileHandlerTest
 
 
 class TestArticleFileHandler(BaseDocumentFileHandlerTest):
@@ -17,7 +16,7 @@ class TestArticleFileHandler(BaseDocumentFileHandlerTest):
 
     @pytest.fixture
     def source_file(self, fixtures):
-        return fixtures['blog/article.html']
+        return fixtures['article.html']
 
     def assert_article_has_been_saved(self, article):
         assert article.title == "House Music Spirit"
@@ -46,7 +45,7 @@ class TestArticleFileHandler(BaseDocumentFileHandlerTest):
 
         assert article.publication_date == date(2019, 1, 31)
 
-    async def test_insert_document(self, db, source_file):
+    async def test_insert_file(self, db, source_file):
         # Fixtures
         source_file.move('blog/2019/01-31.insert.html')
 
@@ -62,7 +61,7 @@ class TestArticleFileHandler(BaseDocumentFileHandlerTest):
         assert article.last_update is None
         self.assert_article_has_been_saved(article)
 
-    async def test_update_document(self, db, source_file):
+    async def test_update_file(self, db, source_file):
         # Fixtures
         original = ArticleFactory(
             uri='update', title="To Update",
@@ -84,31 +83,23 @@ class TestArticleFileHandler(BaseDocumentFileHandlerTest):
         assert updated.last_update == date.today()
         self.assert_article_has_been_saved(updated)
 
-    async def test_rename_document(self, db, source_file):
+    async def test_rename_file(self, db, source_file):
         # Fixtures
-        original = ArticleFactory(
-            uri='rename', title="To Rename",
-            lead="To be renamed.", body="Please rename me!",
-        )
-        assert original.last_update is None
+        article = ArticleFactory(uri='to_rename')
+        assert article.last_update is None
 
-        source_file.move('blog/2019/01-31.rename.html')
-        new_path = source_file.symlink('blog/2019/01-31.new_name.html')
-
-        CategoryFactory(uri='music')
-        [TagFactory(uri=uri) for uri in ['house', 'electro', 'funk']]
+        source_file.move('blog/2019/01-31.to_rename.html')
+        new_path = source_file.symlink('blog/2019/01-31.renamed.html')
 
         # Test
         handler = self.handler(source_file)
-        renamed = await handler.rename(new_path)
+        await handler.rename(new_path)
 
         # Assertions
-        assert renamed is original
-        assert renamed.uri == 'new_name'
-        assert renamed.last_update == date.today()
-        self.assert_article_has_been_saved(renamed)
+        assert article.uri == 'renamed'
+        assert article.last_update == date.today()
 
-    def test_delete_document(self, db):
+    def test_delete_file(self, db):
         article = ArticleFactory(uri='delete')
         source_file = PurePath('blog/2019/01-31.delete.html')
 
