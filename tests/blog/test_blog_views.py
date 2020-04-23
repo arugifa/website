@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from operator import attrgetter
 
-from arugifa.website.blog import factories
+from website.blog import factories
 
 
 class TestBlogHomeView:

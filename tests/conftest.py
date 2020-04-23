@@ -9,14 +9,14 @@ pytest.register_assert_rewrite('website.test.integration')  # Rewrite helper ass
 import webtest
 from arugifa.toolbox.test.pytest import FixtureMarker
 
-from arugifa.website import create_app, db as _db
-from arugifa.website.config import TestingConfig
-from arugifa.website.deployment.factories import BaseCloudFactory
-from arugifa.website.deployment.test import FakeNetwork, CloudStubConnectionFactory
-from arugifa.website.deployment.update import CloudFilesManager
-from arugifa.website.readers import AsciidoctorToHTMLConverter
-from arugifa.website.test.cmdline import CommandLine, TestingShell
-from arugifa.website.test.fixtures import FileFixtureCollection
+from website import create_app, db as _db
+from website.config import TestingConfig
+from website.deployment.factories import BaseCloudFactory
+from website.deployment.test import FakeNetwork, CloudStubConnectionFactory
+from website.deployment.update import CloudFilesManager
+from website.readers import AsciidoctorToHTMLConverter
+from website.test.cmdline import CommandLine, Sass, TestingShell
+from website.test.fixtures import FileFixtureCollection
 
 here = Path(__file__).parent.resolve()
 integration_test = FixtureMarker()
@@ -153,9 +153,11 @@ def object_store(cloud):
 
 @pytest.fixture(scope='session')
 @integration_test
-def asciidoctor():
+async def asciidoctor():
     """Return an Asciidoctor wrapper."""
-    return AsciidoctorToHTMLConverter()
+    asciidoctor = AsciidoctorToHTMLConverter()
+    assert await asciidoctor.is_installed(), "Asciidoctor is not installed"
+    return asciidoctor
 
 
 @pytest.fixture(scope='session')
@@ -168,10 +170,11 @@ def invoke():
 
 @pytest.fixture(scope='session')
 @integration_test
-def sass():
+async def sass():
     """Execute commands with Sass."""
-    # XXX: Check if Sassc is installed? (05/2019)
-    return CommandLine('sassc')
+    sass = Sass()
+    assert await sass.is_installed(), "Sass is not installed"
+    return sass
 
 
 @pytest.fixture

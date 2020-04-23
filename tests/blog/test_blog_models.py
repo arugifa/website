@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 
-from arugifa.website.blog import factories, models
-from arugifa.website.testing.models import BaseDocumentModelTest
+from website.blog import factories, models
+from website.testing.models import BaseDocumentModelTest
 
 
 class TestArticleModel(BaseDocumentModelTest):

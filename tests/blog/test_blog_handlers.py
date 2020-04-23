@@ -3,11 +3,11 @@ from pathlib import PurePath
 
 import pytest
 
-from arugifa.website.blog.factories import ArticleFactory
-from arugifa.website.blog.handlers import ArticleFileHandler
-from arugifa.website.blog.models import Article
-from arugifa.website.factories import CategoryFactory, TagFactory
-from arugifa.website.testing.handlers import BaseDocumentFileHandlerTest
+from website.blog.factories import ArticleFactory
+from website.blog.handlers import ArticleFileHandler
+from website.blog.models import Article
+from website.factories import CategoryFactory, TagFactory
+from website.testing.handlers import BaseDocumentFileHandlerTest
 
 
 class TestArticleFileHandler(BaseDocumentFileHandlerTest):

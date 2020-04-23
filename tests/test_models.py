@@ -1,7 +1,7 @@
 import pytest
 
-from arugifa.website import factories, models
-from arugifa.website.testing.models import BaseModelTest
+from website import factories, models
+from website.testing.models import BaseModelTest
 
 
 class TestCategoryModel(BaseModelTest):

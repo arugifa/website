@@ -8,9 +8,9 @@ from flask_frozen import Freezer
 from git.exc import GitError
 from invoke import Task, task
 
-from arugifa.website import create_app, db as _db
-from arugifa.website.config import DevelopmentConfig
-from arugifa.website.demo import setup_demo
+from website import create_app, db as _db
+from website.config import DevelopmentConfig
+from website.demo import setup_demo
 
 here = Path(__file__).parent
 logger = logging.getLogger(__name__)

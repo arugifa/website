@@ -1,4 +1,4 @@
-from setuptools import find_namespace_packages, setup
+from setuptools import find_packages, setup
 
 setup(
     name='arugifa-website',
@@ -13,7 +13,7 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.8',
     ],
-    packages=find_namespace_packages(include=['arugifa.*']),
+    packages=find_packages(),
     install_requires=[
         'aiofiles>=0.4',
         'arugifa-cms>=0.1.0',

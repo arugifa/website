@@ -1,12 +1,18 @@
+import multiprocessing
+import sys
 from pathlib import PurePath
 
 import pytest
 from pytest_bdd import when
 
+# XXX: See https://github.com/pytest-dev/pytest-flask/issues/104 (04/2020)
+if sys.platform == 'darwin':
+    multiprocessing.set_start_method('fork')
 
-# TODO: Find out why Pytest-BDD does not load this fixture (10/2017)
-# before running tests. However, when the fixture is defined in the same module than
-# the tests, everything is alright.
+
+# TODO: Why Pytest-BDD doesn't load this fixture before running tests? (10/2017)
+# However, when the fixture is defined in the same module than the tests,
+# everything is alright.
 @pytest.fixture('session')
 def pytestbdd_feature_base_dir():
     """Don't look for features in the top-level testing directory."""

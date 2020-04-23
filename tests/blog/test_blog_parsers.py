@@ -1,8 +1,8 @@
 import pytest
 
-from arugifa.website.blog import exceptions
-from arugifa.website.blog.parsers import ArticleSourceParser
-from arugifa.website.testing.parsers import BaseDocumentSourceParserTest
+from website.blog import exceptions
+from website.blog.parsers import ArticleSourceParser
+from website.testing.parsers import BaseDocumentSourceParserTest
 
 
 class TestArticleSourceParser(BaseDocumentSourceParserTest):

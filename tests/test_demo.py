@@ -1,5 +1,5 @@
-from arugifa.website import demo
-from arugifa.website.blog import factories, models
+from website import demo
+from website.blog import factories, models
 
 
 class TestSetupDemo:

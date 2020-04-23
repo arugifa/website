@@ -8,8 +8,8 @@ import requests
 from bs4 import BeautifulSoup
 from requests.exceptions import ConnectionError
 
-from arugifa.website import create_app, db as _db
-from arugifa.website.config import DevelopmentConfig
+from website import create_app, db as _db
+from website.config import DevelopmentConfig
 
 WEB_SERVER_URL = 'http://localhost:5000'
 

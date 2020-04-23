@@ -1,8 +1,10 @@
+import re
+
 import pytest
 
 from arugifa.cms.testing.readers import BaseReaderTest
 
-from arugifa.website.readers import AsciidoctorToHTMLConverter
+from website.readers import AsciidoctorToHTMLConverter
 
 
 class TestAsciidoctorToHTMLConverter(BaseReaderTest):
@@ -14,6 +16,15 @@ class TestAsciidoctorToHTMLConverter(BaseReaderTest):
         document = fixtures['document.adoc']
         actual = await asciidoctor(document).read()
         expected = fixtures['document.html'].open().read()
+
+        # Remove timestamp line to avoid flaky tests:
+        #
+        #     Last updated 2020-02-16 21:05:09 +0100
+        #
+        regex = re.compile(r'Last updated \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \+\d{4}')
+        actual = regex.sub('', actual)
+        expected = regex.sub('', expected)
+
         assert actual == expected
 
     async def test_convert_document_inside_context_manager(
@@ -26,6 +37,14 @@ class TestAsciidoctorToHTMLConverter(BaseReaderTest):
 
         with html.open() as f:
             expected = f.read()
+
+        # Remove timestamp line to avoid flaky tests:
+        #
+        #     Last updated 2020-02-16 21:05:09 +0100
+        #
+        regex = re.compile(r'Last updated \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \+\d{4}')
+        actual = regex.sub('', actual)
+        expected = regex.sub('', expected)
 
         assert actual == expected
 

@@ -3,10 +3,10 @@ from pathlib import PurePath
 
 import pytest
 
-from arugifa.website.blog import exceptions
-from arugifa.website.blog.processors import ArticleFileProcessor
-from arugifa.website.factories import CategoryFactory, TagFactory
-from arugifa.website.testing.processors import BaseDocumentFileProcessorTest
+from website.blog import exceptions
+from website.blog.processors import ArticleFileProcessor
+from website.factories import CategoryFactory, TagFactory
+from website.testing.processors import BaseDocumentFileProcessorTest
 
 
 class TestArticleFileProcessor(BaseDocumentFileProcessorTest):

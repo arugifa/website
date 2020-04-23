@@ -1,4 +1,4 @@
-from arugifa.website.blog import test
+from website.blog import test
 
 
 def test_create_articles(db):
