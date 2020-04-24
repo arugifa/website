@@ -1,9 +1,14 @@
 """Global handlers."""
 
+from arugifa.cms.base.handlers import BaseFileHandler
 
-class CategoriesHandler:
-    pass
+from website import processors
+from website.models import Category, Tag
 
 
-class TagsHandler:
-    pass
+class CategoriesFileHandler(BaseFileHandler):
+    processor = processors.CategoriesFileProcessor
+
+
+class TagsFileHandler(BaseFileHandler):
+    processor = processors.TagsFileProcessor

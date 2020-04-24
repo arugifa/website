@@ -23,6 +23,7 @@ setup(
         'frozen-flask>=0.15',
         'lxml[cssselect]>=4.3',
         'openstacksdk>=0.38',
+        'pyyaml>=5.3',
         'sortedcontainers>=2.1',
         'sqlalchemy>=1.3',
         'tqdm>=4.43',

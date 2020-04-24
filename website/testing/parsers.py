@@ -5,6 +5,7 @@ from arugifa.cms.testing.parsers import BaseSourceParserTest
 from website import exceptions
 
 
+# TODO: Rename to BaseDocumentFileParserTest (04/2019)
 class BaseDocumentSourceParserTest(BaseSourceParserTest):
 
     # Initialize parser.
@@ -83,3 +84,18 @@ class BaseDocumentSourceParserTest(BaseSourceParserTest):
         )
         tags = self.parser(html).parse_tags()
         assert tags == ['tag1', 'tag2', 'tag3']
+
+
+class BaseMetadataFileParserTest(BaseSourceParserTest):
+
+    # Initialize parser.
+
+    def test_source_must_be_valid_yaml(self):
+        with pytest.raises(cms_errors.SourceMalformatted):
+            self.parser('{]')
+
+    def test_source_must_be_a_dictionary(self):
+        raise NotImplementedError
+
+    def test_can_deserialize_empty_source(self):
+        raise NotImplementedError

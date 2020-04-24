@@ -2,13 +2,14 @@
 
 import re
 from operator import attrgetter
-from typing import Any, Iterable, List, Optional, Union
+from typing import Any, ClassVar, Iterable, List, Optional, Union
 
 import sqlalchemy.exc as sql_errors
 import sqlalchemy.orm.exc as orm_errors
 from sortedcontainers import SortedKeyList
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm.properties import RelationshipProperty
 
 from website import db
 from website import exceptions
@@ -124,8 +125,8 @@ class BaseDocument(BaseModel):
 
     __abstract__ = True
 
-    category = None
-    _tags = None
+    category = ClassVar[RelationshipProperty]
+    _tags = ClassVar[RelationshipProperty]
 
     @declared_attr
     def category_id(self):

@@ -46,3 +46,15 @@ class DocumentCategoryNotFound(cms_errors.FileProcessingError):
 
 class DocumentTagsNotFound(cms_errors.FileProcessingError):
     pass
+
+
+class InvalidCategoryNames(cms_errors.SourceParsingError):
+    pass
+
+
+class InvalidTagNames(cms_errors.SourceParsingError):
+    pass
+
+
+class BlankCategories(cms_errors.SourceParsingError):
+    pass

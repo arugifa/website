@@ -1,17 +1,3 @@
-:ascii: https://asciidoctor.org/
-:django: https://www.djangoproject.com/
-:flask: http://flask.pocoo.org/
-:git: https://git-scm.com/
-:inuit: https://github.com/inuitcss/inuitcss
-:invoke: https://www.pyinvoke.org/
-:markdown: https://daringfireball.net/projects/markdown/
-:markup: https://www.ericholscher.com/blog/2016/oct/6/authoring-documentation-with-semantic-meaning/
-:os: https://www.openstack.org/
-:rst: http://docutils.sourceforge.net/rst.html
-:sqlite: https://sqlite.org/
-:swift: https://docs.openstack.org/swift/
-:tox: https://tox.readthedocs.io/
-
 = Alexandre Figura's Website
 
 This repository contains the source code of my website. But not only! This is also a
@@ -84,3 +70,18 @@ pytest
 
 If you use another distribution than Archlinux, have a look inside
 `archlinux.lock`, and install system dependencies manually instead! 😉
+
+
+:ascii: https://asciidoctor.org/
+:django: https://www.djangoproject.com/
+:flask: http://flask.pocoo.org/
+:git: https://git-scm.com/
+:inuit: https://github.com/inuitcss/inuitcss
+:invoke: https://www.pyinvoke.org/
+:markdown: https://daringfireball.net/projects/markdown/
+:markup: https://www.ericholscher.com/blog/2016/oct/6/authoring-documentation-with-semantic-meaning/
+:os: https://www.openstack.org/
+:rst: http://docutils.sourceforge.net/rst.html
+:sqlite: https://sqlite.org/
+:swift: https://docs.openstack.org/swift/
+:tox: https://tox.readthedocs.io/

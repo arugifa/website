@@ -9,8 +9,10 @@ from git.exc import GitError
 from invoke import Task, task
 
 from website import create_app, db as _db
+from website.blog.handlers import ArticleFileHandler
 from website.config import DevelopmentConfig
 from website.demo import setup_demo
+from website.handlers import CategoriesFileHandler, TagsFileHandler
 
 here = Path(__file__).parent
 logger = logging.getLogger(__name__)
