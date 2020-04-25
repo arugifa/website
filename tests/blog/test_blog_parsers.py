@@ -1,11 +1,11 @@
 import pytest
 
 from website.blog import exceptions, parsers
-from website.testing.parsers import BaseDocumentSourceParserTest
+from website.testing.parsers import BaseDocumentFileParserTest
 
 
-class TestArticleSourceParser(BaseDocumentSourceParserTest):
-    parser = parsers.ArticleSourceParser
+class TestArticleFileParser(BaseDocumentFileParserTest):
+    parser = parsers.ArticleFileParser
 
     @pytest.fixture(scope='class')
     def source(self, fixtures):

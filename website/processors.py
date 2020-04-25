@@ -1,11 +1,12 @@
 """Global file processors."""
 
 from website import parsers
+from website.base.processors import BaseMetadataFileProcessor
 
 
-class CategoriesFileProcessor:
-    parser = parsers.CategoriesParser
+class CategoriesFileProcessor(BaseMetadataFileProcessor):
+    parser = parsers.CategoriesFileParser
 
 
-class TagsFileProcessor:
-    parser = parsers.TagsParser
+class TagsFileProcessor(BaseMetadataFileProcessor):
+    parser = parsers.TagsFileParser

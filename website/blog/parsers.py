@@ -5,11 +5,11 @@ import re
 import lxml.etree
 from lxml.cssselect import CSSSelector
 
-from website.base.parsers import BaseDocumentSourceParser
+from website.base.parsers import BaseDocumentFileParser
 from website.blog import exceptions
 
 
-class ArticleSourceParser(BaseDocumentSourceParser):
+class ArticleFileParser(BaseDocumentFileParser):
     """Parse HTML source of a blog article."""
 
     def parse_lead(self) -> str:

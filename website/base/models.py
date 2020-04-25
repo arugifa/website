@@ -17,6 +17,7 @@ from website import exceptions
 
 # Base Models
 
+# TODO: Add metaclass and wrap SQLAlchemy errors into DatabaseErrors (04/2020)
 class BaseModel(db.Model):
     """Base class to be inherited by all other models."""
 
@@ -142,6 +143,12 @@ class BaseDocument(BaseModel):
     def tags(self, value: Iterable):
         """Sort tags when overwriting them."""
         self._tags = TagList(value)
+
+
+class BaseMetadataModel(BaseModel):
+    __abstract__ = True
+
+    name = db.Column(db.String, nullable=False)
 
 
 # Custom Types

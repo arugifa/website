@@ -3,7 +3,7 @@
 See https://asciidoctor.org/ to get more insights.
 """
 
-from arugifa.cms.base.readers import BaseFileReader
+from arugifa.cms.readers import BaseFileReader
 
 
 class AsciidoctorToHTMLConverter(BaseFileReader):

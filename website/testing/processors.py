@@ -1,10 +1,14 @@
 from abc import abstractproperty
 from pathlib import PurePath
+from textwrap import dedent
+from typing import ClassVar
 
 import pytest
+from arugifa.cms import exceptions as cms_errors
 from arugifa.cms.testing.processors import BaseFileProcessorTest
 
 from website import exceptions
+from website.base import processors
 from website.factories import CategoryFactory, TagFactory
 
 
@@ -78,3 +82,35 @@ class BaseDocumentFileProcessorTest(BaseFileProcessorTest):
         source_file = PurePath('document.html')
         actual = self.processor(source_file).scan_uri()
         assert actual == 'document'
+
+
+class BaseMetadataFileProcessorTest:
+    processor = ClassVar[processors.BaseMetadataFileProcessor]
+
+    # TODO: Test for FileLoadingError here and everywhere else (04/2020)
+    async def test_process_file(self, tmp_path):
+        # Fixtures
+        source_file = tmp_path / 'metadata.yml'
+        source_file.write_text(dedent("""
+            dev: Development
+            photo: Photography
+        """))
+
+        # Test
+        processor = self.processor(source_file)
+        actual = await processor.process()
+
+        expected = {
+            'dev': "Development",
+            'photo': "Photography",
+        }
+        assert actual == expected
+
+    async def test_test_process_file_with_errors(self, tmp_path):
+        source_file = tmp_path / 'metadata.yml'
+        source_file.write_text('{"dev": null}')
+
+        processor = self.processor(source_file)
+
+        with pytest.raises(cms_errors.InvalidFile):
+            await processor.process()

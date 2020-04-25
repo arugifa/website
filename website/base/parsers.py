@@ -1,20 +1,20 @@
 """Base classes to parse file sources."""
 
+from abc import abstractmethod
 from typing import Dict, List
 
 import lxml
 import lxml.etree
 import lxml.html
 import yaml
-from arugifa.cms.base.parsers import BaseSourceParser
 from arugifa.cms.exceptions import SourceMalformatted
+from arugifa.cms.parsers import BaseFileParser
 from lxml.cssselect import CSSSelector
 
 from website import exceptions
 
 
-# TODO: Rename to BaseDocumentFileParser (04/2020)
-class BaseDocumentSourceParser(BaseSourceParser):
+class BaseDocumentFileParser(BaseFileParser):
     """Parse HTML source of a document.
 
     When parsing the document, parsing errors are stored inside :attr:`.errors`.
@@ -27,7 +27,7 @@ class BaseDocumentSourceParser(BaseSourceParser):
     """
 
     @staticmethod
-    def deserialize(source) -> lxml.html.HtmlElement:
+    def deserialize(source: str) -> lxml.html.HtmlElement:
         try:
             return lxml.html.document_fromstring(source)
         except lxml.etree.ParserError as exc:
@@ -79,11 +79,16 @@ class BaseDocumentSourceParser(BaseSourceParser):
         return tags
 
 
-class BaseMetadataFileParser(BaseSourceParser):
+class BaseMetadataFileParser(BaseFileParser):
+
+    @abstractmethod
+    def parse_items(self) -> Dict:
+        pass
+
     @staticmethod
     def deserialize(source: str) -> Dict:
         try:
-            # Use a dict by default, in case source is empty:
+            # Use a dict by default, in case source is an empty string:
             data = yaml.safe_load(source) or {}
             assert isinstance(data, dict), "YAML source must contain a dictionary"
         except (AssertionError, yaml.YAMLError) as exc:

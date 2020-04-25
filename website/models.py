@@ -1,20 +1,18 @@
 """Global website models."""
 
 from website import db
-from website.base.models import BaseModel
+from website.base.models import BaseMetadataModel
 
 
-class Category(BaseModel):
+class Category(BaseMetadataModel):
     """Article category (e.g., programming, mountaineering, politics, etc)."""
 
-    name = db.Column(db.String, nullable=False)
     articles = db.relationship('Article', back_populates='category')
 
 
-class Tag(BaseModel):
+class Tag(BaseMetadataModel):
     """Article tag (e.g., Python, cloud, Rust, etc.)."""
 
-    name = db.Column(db.String, nullable=False)
     articles = db.relationship(
         'Article', secondary='article_tags', back_populates='_tags')
 

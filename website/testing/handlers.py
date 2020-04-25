@@ -1,4 +1,5 @@
 from pathlib import PurePath
+from textwrap import dedent
 from typing import ClassVar
 
 import pytest
@@ -6,13 +7,14 @@ from arugifa.cms import exceptions as cms_errors
 from arugifa.cms.testing.handlers import BaseFileHandlerTest
 
 from website import exceptions
+from website.base import handlers
 from website.base.factories import BaseDocumentFactory
-from website.base.handlers import BaseDocumentFileHandler
+from website.base.models import BaseModel
 
 
 class BaseDocumentFileHandlerTest(BaseFileHandlerTest):
-    handler: ClassVar[BaseDocumentFileHandler] = None  # Handler class to test
-    factory: ClassVar[BaseDocumentFactory] = None  # Factory to generate documents
+    handler: ClassVar[handlers.BaseDocumentFileHandler]  # Handler class to test
+    factory: ClassVar[BaseDocumentFactory]  # Factory to generate documents
 
     # Look in database.
 
@@ -89,3 +91,35 @@ class BaseDocumentFileHandlerTest(BaseFileHandlerTest):
 
         with pytest.raises(exceptions.ItemNotFound):
             self.handler(source_file).delete()
+
+
+class BaseMetadataFileHandlerTest(BaseFileHandlerTest):
+    processor = ClassVar[handlers.BaseMetadataFileHandler]
+    model = ClassVar[BaseModel]
+
+    async def test_insert_file(self, db, tmp_path):
+        source_file = tmp_path / 'metadata.yml'
+        source_file.write_text(dedent("""
+            house: House Music
+            trance: Trance Music
+        """))
+
+        from website.factories import CategoryFactory
+        CategoryFactory(uri='house')
+
+        metadata = await self.handler(source_file).insert()
+
+        assert len(metadata) == 2
+        assert metadata[0].uri == 'house'
+        assert metadata[0].name == "House Music"
+        assert metadata[1].uri == 'trance'
+        assert metadata[1].name == "Trance Music"
+
+    async def test_update_file(self):
+        raise NotImplementedError
+
+    async def test_rename_file(self):
+        raise NotImplementedError
+
+    async def test_delete_file(self):
+        raise NotImplementedError

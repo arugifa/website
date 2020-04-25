@@ -3,14 +3,13 @@
 from datetime import date
 
 from website.base.processors import BaseDocumentFileProcessor
-from website.blog import exceptions
-from website.blog.parsers import ArticleSourceParser
+from website.blog import exceptions, parsers
 
 
 class ArticleFileProcessor(BaseDocumentFileProcessor):
     """Process source file of an article."""
 
-    parser = ArticleSourceParser
+    parser = parsers.ArticleFileParser
 
     async def process(self):
         """Analyze article's source file.

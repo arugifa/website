@@ -4,15 +4,17 @@ import logging
 from abc import abstractmethod
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, ClassVar, List, Optional, Tuple
+from typing import Any, Callable, ClassVar, Dict, List, Optional, Tuple
 
 import aiofiles
-from arugifa.cms.base.processors import BaseFileProcessor
+from arugifa.cms import exceptions as cms_errors
+from arugifa.cms.processors import BaseFileProcessor
 from arugifa.cms.typing import FileProcessingErrors, FileProcessingResult
 
 from website import exceptions
-from website.base.parsers import BaseSourceParser
+from website.base import parsers
 from website.models import Category, Tag
+from website.typing import Document
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,9 @@ class BaseDocumentFileProcessor(BaseFileProcessor):
         Must have an API similar to :func:`open`.
         Can be used to convert on the fly a source file to HTML format for example.
     """
+
+    parser = ClassVar[parsers.BaseDocumentFileParser]
+    model = ClassVar[Document]
 
     # Path Scanners
     # Always process paths from right to left,
@@ -70,3 +75,18 @@ class BaseDocumentFileProcessor(BaseFileProcessor):
             raise exceptions.DocumentTagsNotFound(unexisting_tags)
 
         return sorted(tags)
+
+
+class BaseMetadataFileProcessor(BaseFileProcessor):
+    parser = ClassVar[parsers.BaseMetadataFileParser]
+
+    async def process(self) -> Dict:
+        source = await self.load()  # Can raise FileLoadingError
+
+        with source.collect_errors() as errors:
+            result = source.parse_items()
+
+        if errors:
+            raise cms_errors.InvalidFile(errors)
+
+        return result

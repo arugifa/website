@@ -19,6 +19,8 @@ class TestArticleFileHandler(BaseDocumentFileHandlerTest):
         return fixtures['article.html']
 
     def assert_article_has_been_saved(self, article):
+        # TODO: Check article.exists()? (04/2020)
+
         assert article.title == "House Music Spirit"
         assert article.lead == "How House Music could save the world?"
         assert article.body == (

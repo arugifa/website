@@ -7,7 +7,7 @@ from website.base.parsers import BaseMetadataFileParser
 
 
 class CategoriesFileParser(BaseMetadataFileParser):
-    def parse_categories(self) -> Dict:
+    def parse_items(self) -> Dict:
         if not self.source:
             raise exceptions.BlankCategories
 
@@ -24,7 +24,7 @@ class CategoriesFileParser(BaseMetadataFileParser):
 
 
 class TagsFileParser(BaseMetadataFileParser):
-    def parse_tags(self) -> Dict:
+    def parse_items(self) -> Dict:
         invalid_tags = []
 
         for uid, name in self.source.items():

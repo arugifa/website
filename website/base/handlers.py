@@ -2,14 +2,15 @@
 
 import logging
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, List
 
 from arugifa.cms import exceptions as cms_errors
-from arugifa.cms.base.handlers import BaseFileHandler
+from arugifa.cms.handlers import BaseFileHandler
 
 from website import exceptions
+from website.base import processors
 from website.base.models import BaseDocument
-from website.base.processors import BaseDocumentFileProcessor
+from website.typing import Metadata
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ class BaseDocumentFileHandler(BaseFileHandler):
     #: Document model class.
     model: ClassVar[BaseDocument]
     #: Document processor class.
-    processor: ClassVar[BaseDocumentFileProcessor]
+    processor: ClassVar[processors.BaseDocumentFileProcessor]
 
     # Main API
 
@@ -49,6 +50,7 @@ class BaseDocumentFileHandler(BaseFileHandler):
         if document.exists():
             raise exceptions.ItemAlreadyExisting(uri)
 
+        # TODO: Raise InvalidFile inside process() instead? +1 (04/2020)
         processing, errors = await self.source_file.process()
 
         if errors:
@@ -84,14 +86,14 @@ class BaseDocumentFileHandler(BaseFileHandler):
 
         return document
 
-    async def rename(self, target: Path) -> BaseDocument:
+    async def rename(self, target: Path) -> 'BaseDocumentFileHandler':
         """Rename document in database.
 
         :param target:
             new path of document's source file.
 
         :return:
-            the renamed document.
+            the renamed document. NOT TRUE ANYMORE!
 
         :raise website.exceptions.ItemNotFound:
             if the document doesn't exist in database.
@@ -127,3 +129,53 @@ class BaseDocumentFileHandler(BaseFileHandler):
         """
         uri = self.source_file.scan_uri()
         return self.model.find(uri=uri)  # Can raise ItemNotFound
+
+
+class BaseMetadataFileHandler(BaseFileHandler):
+    model: ClassVar[Metadata]
+    processor: ClassVar[processors.BaseMetadataFileProcessor]
+
+    async def insert(self) -> List[Metadata]:
+        items = []
+
+        processing = await self.source_file.process()  # Can raise InvalidFile
+
+        for uri, name in processing.items():
+            item = self.model(uri=uri, name=name)
+            item.save()
+            items.append(item)
+
+        return items
+
+    async def update(self) -> List[Metadata]:
+        items = []
+
+        processing = await self.source_file.process()  # Can raise InvalidFile
+
+        for uri, name in processing.items():
+            try:
+                item = self.model.find(uri=uri)
+            except exceptions.ItemNotFound:
+                item = self.model(uri=uri, name=name)
+            else:
+                item.name = name
+
+            item.save()
+            items.append(item)
+
+        return items
+
+    async def rename(self, target: Path) -> 'BaseMetadataFileHandler':
+        return self.__class__(target)
+
+    async def delete(self) -> None:
+        processing = await self.source_file.process()  # Can raise InvalidFile
+
+        # Can raise DB Integrity Error
+        for uri, name in processing.items():
+            try:
+                item = self.model.find(uri=uri)
+            except exceptions.ItemNotFound:
+                pass
+            else:
+                item.delete()
