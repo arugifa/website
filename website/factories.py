@@ -1,20 +1,20 @@
 from factory import Sequence
 
-from website.base.factories import BaseDatabaseFactory
-from website.models import Category, Tag
+from website import models
+from website.base.factories import BaseMetadataFactory
 
 
-class CategoryFactory(BaseDatabaseFactory):
+class CategoryFactory(BaseMetadataFactory):
     class Meta:
-        model = Category
+        model = models.Category
 
     uri = Sequence(lambda n: f'category_{n+1}')  # Don't start from 0 during demo
     name = Sequence(lambda n: f"Category {n+1}")
 
 
-class TagFactory(BaseDatabaseFactory):
+class TagFactory(BaseMetadataFactory):
     class Meta:
-        model = Tag
+        model = models.Tag
 
     uri = Sequence(lambda n: f'tag_{n+1}')  # Don't start from 0 during demo
     name = Sequence(lambda n: f"Tag {n+1}")

@@ -24,3 +24,9 @@ class BaseDocumentFactory(BaseDatabaseFactory):
 
     category = SubFactory('website.factories.CategoryFactory')
     tags = List([SubFactory('website.factories.TagFactory') for _ in range(2)])
+
+
+class BaseMetadataFactory(BaseDatabaseFactory):
+
+    class Meta:
+        abstract = True

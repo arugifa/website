@@ -39,7 +39,7 @@ class BaseDocumentFileHandler(BaseFileHandler):
         :return:
             the newly created document.
 
-        :raise website.exceptions.ItemAlreadyExisting:
+        :raise website.exceptions.DupplicatedContent:
             if a conflict happens during document insertion.
         :raise website.exceptions.InvalidFile:
             if the document's source file is malformatted.
@@ -48,7 +48,7 @@ class BaseDocumentFileHandler(BaseFileHandler):
         document = self.model(uri=uri)
 
         if document.exists():
-            raise exceptions.ItemAlreadyExisting(uri)
+            raise exceptions.DupplicatedContent(uri)
 
         # TODO: Raise InvalidFile inside process() instead? +1 (04/2020)
         processing, errors = await self.source_file.process()
@@ -136,46 +136,52 @@ class BaseMetadataFileHandler(BaseFileHandler):
     processor: ClassVar[processors.BaseMetadataFileProcessor]
 
     async def insert(self) -> List[Metadata]:
-        items = []
+        new = []
+        existing = []
 
         processing = await self.source_file.process()  # Can raise InvalidFile
 
         for uri, name in processing.items():
             item = self.model(uri=uri, name=name)
-            item.save()
-            items.append(item)
 
-        return items
+            if item.exists():
+                existing.append(uri)
+            else:
+                item.save()
+                new.append(item)
+
+        if existing:
+            raise cms_errors.DupplicatedContent(*existing)
+
+        return new
 
     async def update(self) -> List[Metadata]:
-        items = []
+        existing = {item.uri: item for item in self.model.all()}
+        updated = []
 
-        processing = await self.source_file.process()  # Can raise InvalidFile
+        new = await self.source_file.process()
 
-        for uri, name in processing.items():
+        for uri, name in new.items():
             try:
-                item = self.model.find(uri=uri)
-            except exceptions.ItemNotFound:
+                item = existing.pop(uri)
+            except KeyError:
                 item = self.model(uri=uri, name=name)
             else:
                 item.name = name
+            finally:
+                item.save()
+                updated.append(item)
 
-            item.save()
-            items.append(item)
+        for item in existing.values():
+            item.delete()
 
-        return items
+        return updated
 
     async def rename(self, target: Path) -> 'BaseMetadataFileHandler':
         return self.__class__(target)
 
     async def delete(self) -> None:
-        processing = await self.source_file.process()  # Can raise InvalidFile
-
-        # Can raise DB Integrity Error
-        for uri, name in processing.items():
-            try:
-                item = self.model.find(uri=uri)
-            except exceptions.ItemNotFound:
-                pass
-            else:
-                item.delete()
+        # TODO: What happens when deleting metadata still associated to documents? 4/20
+        # Can raise DB Integrity Error?
+        for item in self.model.all():
+            item.delete()

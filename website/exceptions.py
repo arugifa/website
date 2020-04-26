@@ -22,8 +22,9 @@ class InvalidItem(cms_errors.DatabaseError):
     """If trying to save in database an item which presents integrity errors."""
 
 
-class ItemAlreadyExisting(cms_errors.DatabaseError):
-    """If trying to insert in database an item already existing."""
+# TODO: Replace ItemAlreadyExisting with:
+class DupplicatedContent(cms_errors.DatabaseError):
+    """If trying to insert in database item(s) already existing."""
 
 
 # Content Exceptions
