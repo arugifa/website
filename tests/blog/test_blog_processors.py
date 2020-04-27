@@ -14,7 +14,7 @@ class TestArticleFileProcessor(BaseDocumentFileProcessorTest):
 
     @pytest.fixture
     def source_file(self, fixtures):
-        return fixtures['article.html']
+        return fixtures['asciidoctor/article.html']
 
     # Process file.
 

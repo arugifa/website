@@ -16,7 +16,7 @@ class TestArticleFileHandler(BaseDocumentFileHandlerTest):
 
     @pytest.fixture
     def source_file(self, fixtures):
-        return fixtures['article.html']
+        return fixtures['asciidoctor/article.html']
 
     def assert_article_has_been_saved(self, article):
         # TODO: Check article.exists()? (04/2020)

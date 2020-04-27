@@ -9,7 +9,7 @@ class TestArticleFileParser(BaseDocumentFileParserTest):
 
     @pytest.fixture(scope='class')
     def source(self, fixtures):
-        source_file = fixtures['article.html'].open().read()
+        source_file = fixtures['asciidoctor/article.html'].open().read()
         return self.parser(source_file)
 
     # Parse lead.

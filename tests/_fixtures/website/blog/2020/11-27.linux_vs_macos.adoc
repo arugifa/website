@@ -1,0 +1,19 @@
+= Linux Vs. MacOS: Which one to choose, when you are a sysadmin?
+:description: ops
+:keywords: linux, macos
+
+More and more people use a Mac at work, but is it really better than Linux? Or is it
+more stable? Both systems have their own advantages and drawbacks. But at the end of
+the day, the penguin will probably makes your sysadmin life easier...
+
+== A Bit of History
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur dictum nisi libero,
+nec venenatis nibh fringilla sollicitudin. Donec lobortis aliquam massa, sed convallis
+magna porta nec. Cras porttitor quam non cursus lacinia. Nunc a elementum metus. Aenean
+ac leo finibus, aliquam tortor in, bibendum sapien. Phasellus enim sem, dignissim nec
+dui vitae, consequat condimentum nibh. In et felis interdum, volutpat urna vitae,
+suscipit ante. Donec elit neque, sagittis in lectus id, sollicitudin aliquet dolor.
+Nulla dolor tortor, accumsan non pulvinar vitae, ultricies at nulla. Nunc dignissim
+pellentesque lacinia. Praesent nunc magna, rutrum vitae posuere eu, lacinia imperdiet
+metus. 

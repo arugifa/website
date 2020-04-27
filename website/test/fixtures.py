@@ -71,7 +71,10 @@ class FileFixture(PathLike):
         if shallow:
             target.symlink_to(self.path)
         else:
-            shutil.copyfile(self.path, target)
+            if self.path.is_file():
+                shutil.copyfile(self.path, target)
+            else:
+                shutil.copytree(self.path, target)
 
         return FileFixture(target, self.collection)
 

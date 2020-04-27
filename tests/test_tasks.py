@@ -5,11 +5,14 @@ from subprocess import CalledProcessError
 
 import pytest
 import requests
+from arugifa.cms.git import GitRepository
 from bs4 import BeautifulSoup
 from requests.exceptions import ConnectionError
 
 from website import create_app, db as _db
+from website.blog.models import Article
 from website.config import DevelopmentConfig
+from website.models import Category, Tag
 
 WEB_SERVER_URL = 'http://localhost:5000'
 
@@ -71,6 +74,48 @@ class TestDemo:
 def test_run(invoke):
     check_server_is_running(invoke, 'run')
 
+
+def test_update(app, db, fixtures, invoke, tmp_path):
+    # Create database first.
+    db = tmp_path / 'db.sqlite'
+    db.touch()
+
+    config = DevelopmentConfig(DATABASE_PATH=db)
+    app = create_app(config)
+
+    with app.app_context():
+        _db.create_all()
+
+    # Then initialize a git repository.
+    repository = tmp_path / 'website'
+    fixtures['website'].copy(repository)
+    git = GitRepository.init(repository)
+
+    git.add('README.adoc')
+    git.commit('Initial commit')
+
+    git.add()
+    git.commit('Add content')
+
+    # Finally, update database.
+    invoke.run(f'update --force {db} {repository}')
+
+    categories = Category.all()
+    assert len(categories) == 2
+    assert categories[0].uri == 'dev'
+    assert categories[1].uri == 'ops'
+
+    tags = Tag.all()
+    assert len(tags) == 4
+    assert tags[0].uri == 'k8s'
+    assert tags[1].uri == 'linux'
+    assert tags[2].uri == 'python'
+    assert tags[3].uri == 'rust'
+
+    articles = Article.all()
+    assert len(articles) == 2
+    assert articles[0].uri == 'async_paradigms'
+    assert articles[1].uri == 'linux_vs_macos'
 
 # Helpers
 

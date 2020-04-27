@@ -1,11 +1,19 @@
 """Command-line utilities to manage my website updates and deployment."""
 
+import asyncio
 import logging
+import sys
+from contextlib import suppress
+from functools import partial
 from pathlib import Path
 from sys import exit
 
+from arugifa.cms.exceptions import (
+    ContentUpdatePlanFailure, ContentUpdateRunFailure, GitError)
+from arugifa.cms.git import GitRepository
+from arugifa.cms.update import ContentManager
+from arugifa.toolbox.update.exceptions import UpdateAborted
 from flask_frozen import Freezer
-from git.exc import GitError
 from invoke import Task, task
 
 from website import create_app, db as _db
@@ -13,6 +21,7 @@ from website.blog.handlers import ArticleFileHandler
 from website.config import DevelopmentConfig
 from website.demo import setup_demo
 from website.handlers import CategoriesFileHandler, TagsFileHandler
+from website.readers import AsciidoctorToHTMLConverter
 
 here = Path(__file__).parent
 logger = logging.getLogger(__name__)
@@ -128,22 +137,23 @@ def update(ctx, db, repository, commit='HEAD~1', force=False):
         'blog/**/*.adoc': partial(ArticleFileHandler, reader=asciidoctor),
     }
 
-    async def main(content):
-        repository = Repository(repository)  # Can raise GitError
+    async def main(repository, handlers):
+        repository = GitRepository(repository)  # Can raise GitError
         content = ContentManager(repository, handlers)
 
         with content.load_changes(since=commit) as update:
-            await update.plan(show_preview=true)  # Can raise ContentUpdatePlanFailure
+            await update.plan(show_preview=True)  # Can raise ContentUpdatePlanFailure
 
             if not force:
                 update.confirm()  # Can raise UpdateAborted
 
-            await update.run(show_report=true)  # Can raise ContentUpdateResultFailure
+            await update.run(show_report=True)  # Can raise ContentUpdateResultFailure
 
     with app.app_context(), suppress(UpdateAborted):
         try:
-            asyncio.run(main(content))
-        except (GitError, ContentUpdatePlanFailure, ContentUpdateResultFailure) as exc:
+            asyncio.run(main(repository, handlers))
+        # TODO: Catch and test FileLoadingErrors (04/2020)
+        except (GitError, ContentUpdatePlanFailure, ContentUpdateRunFailure) as exc:
             _db.session.rollback()
             sys.exit(exc)
         else:

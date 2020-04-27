@@ -13,9 +13,9 @@ class TestAsciidoctorToHTMLConverter(BaseReaderTest):
     # Convert document.
 
     async def test_convert_document(self, asciidoctor, fixtures):
-        document = fixtures['document.adoc']
+        document = fixtures['asciidoctor/document.adoc']
         actual = await asciidoctor(document).read()
-        expected = fixtures['document.html'].open().read()
+        expected = fixtures['asciidoctor/document.html'].open().read()
 
         # Remove timestamp line to avoid flaky tests:
         #
@@ -29,8 +29,8 @@ class TestAsciidoctorToHTMLConverter(BaseReaderTest):
 
     async def test_convert_document_inside_context_manager(
             self, asciidoctor, fixtures):
-        adoc = fixtures['document.adoc']
-        html = fixtures['document.html']
+        adoc = fixtures['asciidoctor/document.adoc']
+        html = fixtures['asciidoctor/document.html']
 
         async with asciidoctor(adoc) as f:
             actual = await f.read()

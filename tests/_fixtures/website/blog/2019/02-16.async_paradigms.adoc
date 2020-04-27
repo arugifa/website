@@ -1,0 +1,15 @@
+= How Rust async compares to Python?
+:description: dev
+:keywords: rust, python
+
+Rust, which becomes more and more bankable, recently got support for Asynchronous
+programming. But how does it compare to Python, which async library got stable over
+the recent years, after many trials and errors?
+
+== Python Asyncio: the Unloved One
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque blandit nisi ut
+vehicula ultricies. Etiam sapien purus, viverra et accumsan nec, rhoncus at nunc. Cras
+tincidunt at tellus sit amet faucibus. Nunc euismod feugiat ex sed efficitur. Donec nec
+tempus nibh, ut tempus lacus. Aliquam accumsan orci est, lacinia fermentum urna sodales
+eu. Proin eu eros ligula. Curabitur eget odio auctor augue tincidunt gravida. 
