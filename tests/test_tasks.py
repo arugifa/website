@@ -75,7 +75,7 @@ def test_run(invoke):
     check_server_is_running(invoke, 'run')
 
 
-def test_update(app, db, fixtures, invoke, tmp_path):
+def test_update(fixtures, invoke, tmp_path):
     # Create database first.
     db = tmp_path / 'db.sqlite'
     db.touch()
@@ -100,22 +100,24 @@ def test_update(app, db, fixtures, invoke, tmp_path):
     # Finally, update database.
     invoke.run(f'update --force {db} {repository}')
 
-    categories = Category.all()
-    assert len(categories) == 2
-    assert categories[0].uri == 'dev'
-    assert categories[1].uri == 'ops'
+    with app.app_context():
+        categories = Category.all()
+        assert len(categories) == 2
+        assert categories[0].uri == 'dev'
+        assert categories[1].uri == 'ops'
 
-    tags = Tag.all()
-    assert len(tags) == 4
-    assert tags[0].uri == 'k8s'
-    assert tags[1].uri == 'linux'
-    assert tags[2].uri == 'python'
-    assert tags[3].uri == 'rust'
+        tags = Tag.all()
+        assert len(tags) == 4
+        assert tags[0].uri == 'linux'
+        assert tags[1].uri == 'mac'
+        assert tags[2].uri == 'python'
+        assert tags[3].uri == 'rust'
 
-    articles = Article.all()
-    assert len(articles) == 2
-    assert articles[0].uri == 'async_paradigms'
-    assert articles[1].uri == 'linux_vs_macos'
+        articles = Article.all()
+        assert len(articles) == 2
+        assert articles[0].uri == 'async_paradigms'
+        assert articles[1].uri == 'linux_vs_macos'
+
 
 # Helpers
 

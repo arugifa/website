@@ -104,6 +104,7 @@ class BaseDocumentFileHandler(BaseFileHandler):
         document = self.look_in_db()  # Can raise ItemNotFound
 
         new_handler = self.__class__(target, reader=self.source_file.reader)
+        # TODO: Test error because target doesn't belong to handler (04/2020)
         new_uri = new_handler.source_file.scan_uri()
 
         document.update(uri=new_uri)

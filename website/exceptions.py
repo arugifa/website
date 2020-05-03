@@ -46,7 +46,10 @@ class DocumentCategoryNotFound(cms_errors.FileProcessingError):
 
 
 class DocumentTagsNotFound(cms_errors.FileProcessingError):
-    pass
+    def __str__(self):
+        # TODO: Handler singular/plurial (05/2020)
+        tags = ', '.join(self.args[0])
+        return f"Tags not found: {tags}"
 
 
 class InvalidCategoryNames(cms_errors.SourceParsingError):

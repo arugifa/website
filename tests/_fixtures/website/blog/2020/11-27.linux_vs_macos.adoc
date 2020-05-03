@@ -1,6 +1,6 @@
 = Linux Vs. MacOS: Which one to choose, when you are a sysadmin?
 :description: ops
-:keywords: linux, macos
+:keywords: linux, mac
 
 More and more people use a Mac at work, but is it really better than Linux? Or is it
 more stable? Both systems have their own advantages and drawbacks. But at the end of
