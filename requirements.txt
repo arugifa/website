@@ -3,7 +3,7 @@ factory-boy==2.11.1
 flask==1.0.2
 flask-sqlalchemy==2.4.0
 frozen-flask==0.15
-gitpython==3.0.5
+gitpython==3.1.30
 lxml[cssselect]==4.3.3
 openstacksdk==0.38.0
 sortedcontainers==2.1.0
